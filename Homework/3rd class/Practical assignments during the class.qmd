@@ -1,0 +1,221 @@
+---
+title: |
+  | Practical assignments during the class
+subtitle: "LGN 5822 - Statistical Genetics I: Foundations"
+author:
+  - "Bruna Marques Moreno"
+institute: |
+  | University of Sao Paulo
+  | "Luiz de Quieroz" College of Agriculture
+  | Departament of Genetics
+  | Graduate Program in Genetics and Plant Breeding
+output:
+  html_document:
+    theme: readable
+    highlight: tango
+    toc: true
+    toc_float:
+      collapsed: true
+      smooth_scroll: true
+    toc_depth: 2
+    number_sections: true
+    fig_width: 8
+    fig_height: 8
+    fig_retina: 2
+    fig_caption: true
+    df_print: kable
+    keep_md: true
+---
+
+## Activity of the week (3^rd^ class)
+
+Using your USP number as seed, simulate phenotypic values (don’t forget, P=G+E) using the normal distribution (`rnorm`). Then, compute the mean and the variance of P, G and E, and build a histogram, a density plot, a box plot and a scatter plot depicting the relationship between P and G. Do it for three different sample sizes: 10, 100 and 1000.
+
+### Sample size 10
+
+```{r}
+#| warning: false
+library(dplyr)
+set.seed(8970011)
+
+gen_10 <- rnorm(n=10, mean = 2000, sd = 276)
+env_10 <- rnorm(n=10, mean = 859, sd = 165)
+pheno_10 <- gen_10 + env_10
+
+dados <- c(gen_10, env_10, pheno_10)
+dat_10 <- data.frame("class" = c(rep("Gen", 10), rep("Env", 10), rep("Pheno", 10)),
+                     "valores" = dados)
+
+df_10 <- data.frame("Gen" = gen_10,
+                    "Env" = env_10,
+                    "Pheno" = pheno_10)
+
+mean <- tapply(dat_10$valores, dat_10$class, mean)
+
+var <- tapply(dat_10$valores, dat_10$class, var)
+var
+```
+
+### Graphs sample size 10
+
+```{r}
+#| warning: false
+library(ggplot2)
+
+# Histogram
+ggplot(data = dat_10, aes(x = valores, fill = class)) +
+  geom_histogram()+
+  geom_vline(aes(xintercept = mean["Gen"], linetype = "Mean Genotypic value", color = "Mean Genotypic value"), linewidth = 1) +
+  geom_vline(aes(xintercept = mean["Env"],  linetype = "Mean Environmental value", color = "Mean Environmental value"), linewidth = 1) +
+  geom_vline(aes(xintercept = mean["Pheno"],  linetype = "Mean Phenotypic value", color = "Mean Phenotypic value"), linewidth = 1)+
+  labs(linetype = "Parameter", color = "Parameter")
+
+# Density
+ggplot(data = dat_10, aes(x = valores, fill = class)) +
+  geom_density()+
+  geom_vline(aes(xintercept = mean["Gen"], linetype = "Mean Genotype", color = "Mean Genotype"), linewidth = 1) +
+  geom_vline(aes(xintercept = mean["Env"],  linetype = "Mean Environment", color = "Mean Environment"), linewidth = 1) +
+  geom_vline(aes(xintercept = mean["Pheno"],  linetype = "Mean Phenotype", color = "Mean Phenotype"), linewidth = 1)
+
+# Boxplot
+ggplot(data = dat_10, aes(x = class, y= valores, fill = class)) +
+  geom_boxplot() 
+
+ggplot(data = dat_10, aes(x = class, y= valores, fill = class)) +
+  geom_violin()
+
+# Scatter plot
+ggplot(data = df_10, aes(x = Gen, y = Pheno)) +
+  geom_jitter(size = 3, alpha = 0.7, width = 0.2, color = "orange") +
+  labs(x = "Genotype",
+       y = "Phenotype",
+       subtitle = paste("Correlação de Pearson =", round(cor(df_10$Gen, df_10$Pheno), 4)))
+```
+
+### Sample size 100
+
+```{r}
+#| warning: false
+library(dplyr)
+set.seed(8970011)
+
+gen_100 <- rnorm(n=100, mean = 2000, sd = 276)
+env_100 <- rnorm(n=100, mean = 859, sd = 165)
+pheno_100 <- gen_100 + env_100
+
+dados <- c(gen_100, env_100, pheno_100)
+dat_100 <- data.frame("class" = c(rep("Gen", 100), rep("Env", 100), rep("Pheno", 100)),
+                     "valores" = dados)
+
+df_100 <- data.frame("Gen" = gen_100,
+                    "Env" = env_100,
+                    "Pheno" = pheno_100)
+
+mean <- tapply(dat_100$valores, dat_100$class, mean)
+
+var <- tapply(dat_100$valores, dat_100$class, var)
+var
+```
+
+### Graphs sample size 100
+
+```{r}
+#| warning: false
+library(ggplot2)
+
+# Histogram
+ggplot(data = dat_100, aes(x = valores, fill = class)) +
+  geom_histogram()+
+  geom_vline(aes(xintercept = mean["Gen"], linetype = "Mean Genotypic value", color = "Mean Genotypic value"), linewidth = 1) +
+  geom_vline(aes(xintercept = mean["Env"],  linetype = "Mean Environmental value", color = "Mean Environmental value"), linewidth = 1) +
+  geom_vline(aes(xintercept = mean["Pheno"],  linetype = "Mean Phenotypic value", color = "Mean Phenotypic value"), linewidth = 1)+
+  labs(linetype = "Parameter", color = "Parameter")
+
+# Density
+ggplot(data = dat_100, aes(x = valores, fill = class)) +
+  geom_density()+
+  geom_vline(aes(xintercept = mean["Gen"], linetype = "Mean Genotype", color = "Mean Genotype"), linewidth = 1) +
+  geom_vline(aes(xintercept = mean["Env"],  linetype = "Mean Environment", color = "Mean Environment"), linewidth = 1) +
+  geom_vline(aes(xintercept = mean["Pheno"],  linetype = "Mean Phenotype", color = "Mean Phenotype"), linewidth = 1)
+
+# Boxplot
+ggplot(data = dat_100, aes(x = class, y= valores, fill = class)) +
+  geom_boxplot() 
+
+ggplot(data = dat_100, aes(x = class, y= valores, fill = class)) +
+  geom_violin()
+
+# Scatter plot
+ggplot(data = df_100, aes(x = Gen, y = Pheno)) +
+  geom_jitter(size = 3, alpha = 0.7, width = 0.2, color = "orange") +
+  labs(x = "Genotype",
+       y = "Phenotype",
+       subtitle = paste("Correlação de Pearson =", round(cor(df_100$Gen, df_100$Pheno), 4)))
+```
+
+### Sample size 1000
+
+```{r}
+#| warning: false
+library(dplyr)
+set.seed(8970011)
+
+gen_1000 <- rnorm(n=1000, mean = 2000, sd = 276)
+env_1000 <- rnorm(n=1000, mean = 859, sd = 165)
+pheno_1000 <- gen_1000 + env_1000
+
+dados <- c(gen_1000, env_1000, pheno_1000)
+dat_1000 <- data.frame("class" = c(rep("Gen", 1000), rep("Env", 1000), rep("Pheno", 1000)),
+                     "valores" = dados)
+
+df_1000 <- data.frame("Gen" = gen_1000,
+                    "Env" = env_1000,
+                    "Pheno" = pheno_1000)
+
+mean <- tapply(dat_1000$valores, dat_1000$class, mean)
+
+var <- tapply(dat_1000$valores, dat_1000$class, var)
+var
+```
+
+### Graphs sample size 100
+
+```{r}
+#| warning: false
+library(ggplot2)
+
+# Histogram
+ggplot(data = dat_1000, aes(x = valores, fill = class)) +
+  geom_histogram()+
+  geom_vline(aes(xintercept = mean["Gen"], linetype = "Mean Genotypic value", color = "Mean Genotypic value"), linewidth = 1) +
+  geom_vline(aes(xintercept = mean["Env"],  linetype = "Mean Environmental value", color = "Mean Environmental value"), linewidth = 1) +
+  geom_vline(aes(xintercept = mean["Pheno"],  linetype = "Mean Phenotypic value", color = "Mean Phenotypic value"), linewidth = 1)
+
+ggplot(data = dat_1000, aes(x = valores, fill = class)) +
+  geom_histogram()+
+  facet_grid(class ~ . , scale = "free_y")+
+  geom_vline(aes(xintercept = mean["Gen"], linetype = "Mean Genotypic value", color = "Mean Genotypic value"), linewidth = 1) +
+  geom_vline(aes(xintercept = mean["Env"],  linetype = "Mean Environmental value", color = "Mean Environmental value"), linewidth = 1) +
+  geom_vline(aes(xintercept = mean["Pheno"],  linetype = "Mean Phenotypic value", color = "Mean Phenotypic value"), linewidth = 1)
+
+# Density
+ggplot(data = dat_1000, aes(x = valores, fill = class)) +
+  geom_density()+
+  geom_vline(aes(xintercept = mean["Gen"], linetype = "Mean Genotype", color = "Mean Genotype"), linewidth = 1) +
+  geom_vline(aes(xintercept = mean["Env"],  linetype = "Mean Environment", color = "Mean Environment"), linewidth = 1) +
+  geom_vline(aes(xintercept = mean["Pheno"],  linetype = "Mean Phenotype", color = "Mean Phenotype"), linewidth = 1)
+
+# Boxplot
+ggplot(data = dat_1000, aes(x = class, y= valores, fill = class)) +
+  geom_boxplot() 
+
+ggplot(data = dat_1000, aes(x = class, y= valores, fill = class)) +
+  geom_violin()
+
+# Scatter plot
+ggplot(data = df_1000, aes(x = Gen, y = Pheno)) +
+  geom_jitter(size = 3, alpha = 0.7, width = 0.2, color = "orange") +
+  labs(x = "Genotype",
+       y = "Phenotype",
+       subtitle = paste("Correlação de Pearson =", round(cor(df_1000$Gen, df_1000$Pheno), 4)))
+```
