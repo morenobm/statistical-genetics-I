@@ -37,13 +37,15 @@ library(tidyr)
 library(dplyr)
 library(knitr)
 library(kableExtra)
+library(grid)
+library(corrplot)
 
 # Loading data (Zambia)
 data = read.csv("https://raw.githubusercontent.com/mauricioaraujj/Pan_African_Trials_Network/refs/heads/main/data/data.csv", sep = ';') |> filter(COUNTRY == "Zambia") 
 
 # Selecting traits
 traits <- c("FLW_DAYS", "GY", "PH_R8", "PL_EMERG_COUNT", "Pod_Shattering")
-selected_data <- data |> select(COUNTRY, YEAR, env, gen, loc, SEASON, rep, check, all_of(traits)) |> filter(loc %in% c("L0118", "L0133", "L074", "L099") & YEAR == "2023")
+selected_data <- data |> select(COUNTRY, YEAR, env, gen, loc, SEASON, rep, check, all_of(traits)) |> filter(loc %in% c("L0118", "L0133", "L074", "L0134") & YEAR == "2023")
 
 # Trial 1 - Local "L0118" / Year "2023" 
 trial_1 <- selected_data |> filter(loc == "L0118", YEAR == "2023")
@@ -58,7 +60,7 @@ trial_3 <- selected_data |> filter(loc == "L074", YEAR == "2023")
 genotypes_3 <- trial_3$gen
 
 # Trial 4 - Local "L099" / Year "2023" 
-trial_4 <- selected_data |> filter(loc == "L099", YEAR == "2023")
+trial_4 <- selected_data |> filter(loc == "L0134", YEAR == "2023")
 genotypes_4 <- trial_4$gen
 ```
 
@@ -91,6 +93,10 @@ trial_summary <- function(df, title, traits, bins){
       range = max(value, na.rm = TRUE) - min(value, na.rm = TRUE)) |> 
     mutate(across(where(is.numeric), ~round(.x, 3)))
   
+  # Correlation between traits
+  cor_mat <- df |>
+    select(all_of(traits)) |>
+    cor(use = "complete.obs")
   
   # Traits Boxplots
   p1 <- ggplot(df_long, aes(x = value, y = Variable, fill = Variable)) +
@@ -138,6 +144,66 @@ trial_summary <- function(df, title, traits, bins){
 }
 
 
+# Function - Pairwise Scatter plot
+pairwise_scatter <- function(df, title, trait1, trait2, t1_lab, t2_lab){
+  
+  # Dataframe long
+  df_long <- df |>
+    pivot_longer(cols = all_of(c(trait1, trait2)),
+      names_to = "variable",
+      values_to = "value") |>
+    mutate(Variable = variable)
+  
+  # Trait1 and Trait2 - Scatter plot
+  p1 <- ggplot(df, aes(x = .data[[trait1]], y = .data[[trait2]])) +
+        geom_point(color = "olivedrab4", alpha = 0.7) +
+        labs(
+          title = paste(title),
+          x = t1_lab,
+          y = t2_lab,
+          caption = paste("Correlation: ",
+          round(cor(df[[trait1]], df[[trait2]], use = "complete.obs"), 2))) +
+        theme_minimal() +
+        theme(text = element_text(size = 18))
+  
+  return (p1)
+}
+
+# Function - Boxplot by Genotype
+boxplot_by_genotype <- function(df, title, trait, trait_lab){
+    
+  # Dataframe long
+  df_long <- df |>
+    pivot_longer(cols = all_of(trait),
+      names_to = "Variable",
+      values_to = "value")
+  stats_df <- df_long |>
+    group_by(gen) |>
+    summarise(mean = mean(value, na.rm = TRUE), .groups = "drop")
+  df_plot <- df_long |> 
+    left_join(stats_df, by = "gen")
+  
+  p1 <- ggplot(df_plot, aes(x = as.factor(gen), y = value, fill = mean)) +
+        geom_boxplot(alpha = 0.7) +
+        geom_jitter(width = .2, size = 2, alpha = .75, color = "black") +
+        scale_fill_viridis_c() +
+        labs(title = title,
+          x = "Genotypes",
+          y = trait_lab,
+          fill = "Mean") +
+        theme_minimal() +
+        theme(axis.text.y = element_blank(),text = element_text(size = 18)) +
+        theme(axis.text.x = element_text(size = 10))
+  
+  return (boxplot_genotypes = p1)
+}
+```
+
+```{r}
+#| label: fig-corr-indiv
+#| layout-ncol: 2
+#| fig-height: 8
+#| warning: false
 
 # Correlation Analysis
 # Standardized Plot Function
@@ -168,10 +234,7 @@ plot_std_corr <- function(df, title_name, type = "upper") {
            mar = c(0,0,2,0))          
 }
 
-#| label: fig-corr-indiv
-#| layout-ncol: 2
-#| fig-height: 8
-#| warning: false
+
 
 # individual plots 
 plot_std_corr(trial_1, "L0118")
@@ -200,34 +263,10 @@ corrplot(cor_total,
          title = "\nCORRELATION_ALL TRIALS",
          mar = c(0,0,2,0))
 
+```
 
-
-
-
-# Function - Pairwise Scatter plot
-pairwise_scatter <- function(df, title, trait1, trait2, t1_lab, t2_lab){
-  
-  # Dataframe long
-  df_long <- df |>
-    pivot_longer(cols = all_of(c(trait1, trait2)),
-      names_to = "variable",
-      values_to = "value") |>
-    mutate(Variable = variable)
-  
-  # Trait1 and Trait2 - Scatter plot
-  p1 <- ggplot(df, aes(x = .data[[trait1]], y = .data[[trait2]])) +
-        geom_point(color = "olivedrab4", alpha = 0.7) +
-        labs(
-          title = paste(title),
-          x = t1_lab,
-          y = t2_lab,
-          caption = paste("Correlation: ",
-          round(cor(df[[trait1]], df[[trait2]], use = "complete.obs"), 2))) +
-        theme_minimal() +
-        theme(text = element_text(size = 18))
-  
-  return (p1)
-}
+```{r}
+# Function - Across Trials Comparison
 ```
 
 # Trial 1 - Local "L0118" / Year "2023"
@@ -241,11 +280,13 @@ T1_summary$correlation
 T1_summary$boxplot
 T1_summary$density
 T1_summary$histogram
+
+# Trait By Genotype
+aa <- boxplot_by_genotype(trial_1, "Trial 1", "GY", "GY (kg/ha)")
+aa
 ```
 
 ## A FAZER
-
-1\) Boxplot do trait destrinchando os genótipos
 
 2\) Calcular correlacao (matriz) e comparar com valor do scatter plot
 
