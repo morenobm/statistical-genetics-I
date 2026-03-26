@@ -138,65 +138,68 @@ trial_summary <- function(df, title, traits, bins){
 }
 
 
-# Correlation
-# Plot Function
+
+# Correlation Analysis
+# Standardized Plot Function
 plot_std_corr <- function(df, title_name, type = "upper") {
-  # Select traits
+  
+  # 1. Select traits
   df_sub <- df %>% 
     select(all_of(traits)) %>% 
     mutate(across(everything(), as.numeric))
   
-  # Filter out columns with (SD = 0) (ERROR)
+  # 2. Filter out columns with SD = 0
   cols_to_keep <- sapply(df_sub, function(x) sd(x, na.rm = TRUE) > 0)
   df_filtered <- df_sub[, cols_to_keep, drop = FALSE]
   
-  # MATRIX
+  # 3. Correlation Matrix
   m <- cor(df_filtered, use = "complete.obs")
   
-  # Plotting with standardized style
+  # 4. Plotting with standardized visual style
   corrplot(m, 
            method = "color",           
-           type = type,                
-           addCoef.col = "black",     
-           tl.col = "black",          
-           diag = TRUE,                # Display the main diagonal (1.00)
-           number.cex = 0.7,           # Coefficient font size
+           type = type,               
+           addCoef.col = "black",      
+           tl.col = "black",           
+           diag = TRUE,                
+           number.cex = 0.7,           
            tl.srt = 45,                
            title = paste("\nLocation:", title_name),
-           mar = c(0,0,2,0))           
+           mar = c(0,0,2,0))          
 }
-
 
 #| label: fig-corr-indiv
 #| layout-ncol: 2
 #| fig-height: 8
+#| warning: false
 
-# individual plots for each location
+# individual plots 
 plot_std_corr(trial_1, "L0118")
 plot_std_corr(trial_2, "L0133")
 plot_std_corr(trial_3, "L074")
-plot_std_corr(trial_4, "L099")
+plot_std_corr(trial_4, "L0134")
 
 
 #| label: fig-corr-all
 #| fig-height: 10
+#| fig-cap: "Correlation"
+#| warning: false
 
-# Merging all data into one dataframe
+#  all trial data into a single dataframe for across-trial analysis
 all_trials <- bind_rows(trial_1, trial_2, trial_3, trial_4) %>%
   mutate(across(all_of(traits), as.numeric))
 
-# Compute overall correlation
+# correlation matrix
 cor_total <- cor(all_trials %>% select(all_of(traits)), use = "complete.obs")
-
-# Plotting the full consolidated matrix
 corrplot(cor_total, 
          method = "color", 
          type = "full", 
          addCoef.col = "black", 
          tl.col = "black", 
          diag = TRUE,
-         title = "\nCONSOLIDATED CORRELATION (ALL TRIALS)",
+         title = "\nCORRELATION_ALL TRIALS",
          mar = c(0,0,2,0))
+
 
 
 
