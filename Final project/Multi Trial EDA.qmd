@@ -400,3 +400,51 @@ boxplot_genotype_all_in_one(all_trials_cleanPH_R8 , "PH_R8")
 
 across_trials_correlation(selected_data, "Titulo", traits)
 ```
+```{r}
+#| warning: FALSE
+#| label: tabela-trait-local
+#| tbl-cap: "Medidas de tendência central e dispersão dos experimentos performados na Zâmbia"
+envs <- c("L0118", "L0133", "L074", "L099")
+traits <- c("FLW_DAYS", "GY", "PH_R8", "PL_EMERG_COUNT", "Pod_Shattering")
+df_empilhado <- map_df(seq_along(results), function(i) {
+  results[[i]]$stats |> 
+    mutate(Local = envs[i]) 
+})
+
+df_para_tabela <- df_empilhado |>
+    pivot_longer(
+    cols = c(mean, median, variance, sd, min, max, range), 
+    names_to = "Estatistica", 
+    values_to = "Valor"
+  ) |>
+   mutate(Estatistica = case_match(Estatistica,
+    "mean" ~ "Média",
+    "median" ~ "Mediana",
+    "variance" ~ "Variância",
+    "sd" ~ "Desvio Padrão",
+    "min" ~ "Mínimo",
+    "max" ~ "Máximo",
+    "range" ~ "Amplitude"
+  )) |>
+  pivot_wider(names_from = c(Variable, Local), values_from = Valor)
+
+n_traits <- 5
+n_locais <- 4
+
+cabecalho_superior <- c(" " = 1)
+cabecalho_superior[traits] <- n_locais 
+
+df_para_tabela |>
+  kable(
+    digits = 2,
+    align = "l",
+    col.names = c(" ", rep(envs, n_traits)), 
+    caption = "Medidas de tendência central e dispersão dos experimentos performados na Zâmbia"
+  ) |>
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed"), 
+    full_width = FALSE
+  ) |>
+  add_header_above(cabecalho_superior) |>
+  column_spec(1, bold = TRUE, border_right = TRUE)
+```
