@@ -281,6 +281,16 @@ T1_summary$boxplot
 T1_summary$density
 T1_summary$histogram
 
+# Graphs for each trial
+
+results <- list()
+trials <- list(trial_1, trial_2, trial_3, trial_4)
+for(i in seq_along(trials)){
+  results[[i]] <- trial_summary(trials[[i]],"i", traits, 30)
+}
+
+results[[1]]$boxplot
+
 # Trait By Genotype
 aa <- boxplot_by_genotype(trial_1, "Trial 1", "GY", "GY (kg/ha)")
 aa
