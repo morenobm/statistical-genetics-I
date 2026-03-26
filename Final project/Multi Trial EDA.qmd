@@ -38,40 +38,46 @@ library(dplyr)
 library(knitr)
 library(kableExtra)
 library(grid)
-library(corrplot)
+library(ggcorrplot)
 
 # Loading data (Zambia)
 data = read.csv("https://raw.githubusercontent.com/mauricioaraujj/Pan_African_Trials_Network/refs/heads/main/data/data.csv", sep = ';') |> filter(COUNTRY == "Zambia") 
 
 # Selecting traits
 traits <- c("FLW_DAYS", "GY", "PH_R8", "PL_EMERG_COUNT", "Pod_Shattering")
-selected_data <- data |> select(COUNTRY, YEAR, env, gen, loc, SEASON, rep, check, all_of(traits)) |> filter(loc %in% c("L0118", "L0133", "L074", "L0134") & YEAR == "2023")
+selected_data <- data |> 
+  select(COUNTRY, YEAR, env, gen, loc, SEASON, rep, check, all_of(traits)) |> 
+  filter(loc %in% c("L0118", "L0133", "L074", "L0134") & YEAR == "2023") |> 
+  mutate(trial = case_when(
+    loc == "L0118" & YEAR == "2023" ~ 1,
+    loc == "L0133" & YEAR == "2023" ~ 2,
+    loc == "L074"  & YEAR == "2023" ~ 3,
+    loc == "L0134" & YEAR == "2023" ~ 4)) |> 
+  mutate(trial = as.factor(trial))
 
 # Trial 1 - Local "L0118" / Year "2023" 
-trial_1 <- selected_data |> filter(loc == "L0118", YEAR == "2023")
+trial_1 <- selected_data |> filter(trial == "1")
 genotypes_1 <- trial_1$gen
 
 # Trial 2 - Local "L0133" / Year "2023" 
-trial_2 <- selected_data |> filter(loc == "L0133", YEAR == "2023")
+trial_2 <- selected_data |> filter(trial == "2")
 genotypes_2 <- trial_2$gen
 
 # Trial 3 - Local "L074" / Year "2023" 
-trial_3 <- selected_data |> filter(loc == "L074", YEAR == "2023")
+trial_3 <- selected_data |> filter(trial == "3")
 genotypes_3 <- trial_3$gen
 
-# Trial 4 - Local "L099" / Year "2023" 
-trial_4 <- selected_data |> filter(loc == "L0134", YEAR == "2023")
+# Trial 4 - Local "L0134" / Year "2023" 
+trial_4 <- selected_data |> filter(trial == "4")
 genotypes_4 <- trial_4$gen
 ```
-
-# Trials Overview
-
-Explicar genotipos do experimento, e cada trait analisado.
 
 # Functions
 
 ```{r}
-# Function - Trial Summary
+#| warning: false
+
+# Function 1 - Single Trial Summary
 trial_summary <- function(df, title, traits, bins){
   
   # Dataframe long
@@ -98,8 +104,16 @@ trial_summary <- function(df, title, traits, bins){
     select(all_of(traits)) |>
     cor(use = "complete.obs")
   
+  p1 <-ggcorrplot(cor_mat, 
+           hc.order = TRUE,           
+           type = "upper",               
+           lab = TRUE,      
+           lab_size = 3,           
+           colors = c("red", "white", "blue"),      
+           title = title)   
+  
   # Traits Boxplots
-  p1 <- ggplot(df_long, aes(x = value, y = Variable, fill = Variable)) +
+  p2 <- ggplot(df_long, aes(x = value, y = Variable, fill = Variable)) +
         geom_boxplot(alpha = 0.7) +
         facet_wrap(~Variable, scales = "free") +
         geom_point(data = stats_df, aes(x = mean, y = Variable),
@@ -113,7 +127,7 @@ trial_summary <- function(df, title, traits, bins){
         theme(axis.text.y = element_blank(),text = element_text(size = 18))
   
   # Traits Density Plot
-  p2 <- ggplot(df_long, aes(x = value, fill = Variable)) +
+  p3 <- ggplot(df_long, aes(x = value, fill = Variable)) +
         geom_density(alpha = 0.6, show.legend = FALSE) +
         geom_vline(data = stats_df, aes(xintercept = mean),
           linetype = "dashed", linewidth = 0.8, show.legend = FALSE) +
@@ -129,7 +143,7 @@ trial_summary <- function(df, title, traits, bins){
         theme(text = element_text(size = 18))
   
   # Traits Histogram
-  p3 <- ggplot(df_long, aes(x = value, fill = Variable)) + 
+  p4 <- ggplot(df_long, aes(x = value, fill = Variable)) + 
         geom_histogram(bins = 30, color = "white", 
           alpha = 0.7, show.legend = FALSE) + 
         facet_wrap(~Variable, scales = "free") +
@@ -140,11 +154,11 @@ trial_summary <- function(df, title, traits, bins){
         theme_minimal() +
         theme(text = element_text(size = 18))
   
-  return(list(stats = stats_df,correlation = cor_mat,boxplot = p1, density = p2, histogram = p3))
+  return(list(stats = stats_df,correlation = p1,boxplot = p2, density = p3, histogram = p4))
 }
 
 
-# Function - Pairwise Scatter plot
+# Function 2 - Single Trial Pairwise Scatter plot
 pairwise_scatter <- function(df, title, trait1, trait2, t1_lab, t2_lab){
   
   # Dataframe long
@@ -166,10 +180,10 @@ pairwise_scatter <- function(df, title, trait1, trait2, t1_lab, t2_lab){
         theme_minimal() +
         theme(text = element_text(size = 18))
   
-  return (p1)
+  return (scatter = p1)
 }
 
-# Function - Boxplot by Genotype
+# Function 3 - Single Trial Boxplot by Genotype
 boxplot_by_genotype <- function(df, title, trait, trait_lab){
     
   # Dataframe long
@@ -197,115 +211,192 @@ boxplot_by_genotype <- function(df, title, trait, trait_lab){
   
   return (boxplot_genotypes = p1)
 }
+
+# Function 4 - Single Trials Analysis Together
+single_trials_together <- function(df, title, traits) {
+  
+  # Dataframe long
+  df_long <- df |> 
+    mutate(Trial = as.factor(trial)) |> 
+    pivot_longer(
+      cols = all_of(traits),
+      names_to = "Trait",
+      values_to = "Value") |> 
+    filter(!is.na(Value))
+  
+  # Boxplots 
+  p1 <- ggplot(df_long, aes(x = Trial, y = Value, fill = Trial)) +
+          geom_boxplot(outlier.colour = "black", outlier.size = 0.5) +
+          facet_wrap(~Trait, scales = "free") +
+          theme_minimal() +
+          labs(title = title)
+
+  # Density Plot
+  p2 <- ggplot(df_long, aes(x = Value, fill = Trial, group = Trial)) +
+          geom_density(alpha = 0.4) +
+          facet_wrap(~Trait, scales = "free") +
+          theme_light() +
+          labs(title = title)
+
+return (list(boxplots = p1, density = p2))
+}
+
+# Function 5 - All Trials Boxplot By Genotype 
+boxplot_genotype_all_in_one <- function(df, trait) {
+  
+  # Boxplot by Genotype and Trial
+  p1 <- ggplot(df, aes(x = reorder(gen, !!sym(trait)), y = !!sym(trait), fill = trial)) +
+        geom_boxplot(alpha = 0.7, outlier.shape = NA, na.rm = TRUE) + 
+        labs(
+          title = paste("Performance Across Trials:", trait),
+          x = "Genotypes",
+          y = trait,
+          fill = "Trial"
+        ) +
+        theme_minimal() +
+        theme(
+          axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 8),
+          legend.position = "top",
+          panel.grid.minor = element_blank())
+        
+  # Boxplot by Genotype
+  p2 <- ggplot(df, aes(x = reorder(gen, !!sym(trait)), y = !!sym(trait))) +
+        geom_boxplot(fill = "grey80", color = "black", outlier.shape = NA,na.rm = TRUE) +
+        geom_jitter(aes(color = trial),width = 0.2,size = 1.2,alpha = 0.8, na.rm = TRUE) +
+        labs(
+          title = paste("Performance Across Trials:", trait),
+          x = "Genotypes",
+          y = trait,
+          color = "Trial") +
+        theme_minimal() +
+        theme(
+          axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 8),
+          legend.position = "top",
+          panel.grid.minor = element_blank())
+   
+  return (list(boxplot_gt_trial = p1, boxplot_gt = p2))
+}
+
+
+# Function 6 - Across Trials Correlation
+across_trials_correlation <- function(df, title, traits) {
+
+  # Correlation Plot with all trials
+  cor_total <- df |>
+    select(all_of(traits)) |>
+    cor(use = "complete.obs")
+
+  p1 <-ggcorrplot(cor_total, 
+         hc.order = TRUE,           
+         type = "upper",               
+         lab = TRUE,      
+         lab_size = 3,           
+         colors = c("red", "white", "blue"),      
+         title = title)
+  
+  return(all_cor = p1)
+}
 ```
 
+# Trials Overview
+
+Explicar genotipos do experimento, e cada trait analisado.
+
+# Trial 1 - Local "L0118" / Year "2023"
+
+## A FAZER
+
+1\) Listar os genotipos do experimento, e explicar cada trait analisado.
+
+2\) Fazer um exemplo manual para verificar as medidas de posição, dispersão, correlação e funcções
+
+3\) Definir critério de avaliação para os outliers (Trial 1 tem 1 outlier na altura)
+
+4\) Rodar as funções para cada Trial e depois entre Trials
+
+5\) Organizar documentos e fazer as interpretações
+
+## Uso das Funções
+
 ```{r}
+#| warning: false
+
+## Function 1 - Single Trial Summary
+all_trials_summary <- list()
+trials <- list(trial_1, trial_2, trial_3, trial_4)
+for(i in seq_along(trials)){
+  title <- paste("Trial", i)
+  all_trials_summary[[i]] <- trial_summary(trials[[i]],title, traits, 30)
+}
+
+# Example - Trial 1
+all_trials_summary[[1]]$stats
+all_trials_summary[[1]]$correlation
+all_trials_summary[[1]]$density
+all_trials_summary[[1]]$boxplot
+all_trials_summary[[1]]$histogram
+
+#######################################################################
+
+## Function 2 - Single Trial Pairwise Scatter plot
+pairwise_scatter(trial_2,"Título", "GY", "PH_R8", "GY (kg/ha)", "PH (cm)")
+
+######################################################################
+
+## Function 3 - Single Trial Boxplot by Genotype
+boxplot_by_genotype(trial_1,"Título", "GY", "GY (kg/ha)")
+
+######################################################################
+
+## Function 4 - Single Trials Analysis Together
+all_trials_together <- single_trials_together(selected_data, "Título", traits)
+
+# Outputs
+all_trials_together$density
+all_trials_together$boxplot
+
+#######################################################################
+
+# Function 5 - All Trials Boxplot By Genotype
+all_genotype_GY <- boxplot_genotype_all_in_one(selected_data,"GY")
+all_genotype_GY$boxplot_gt_trial
+all_genotype_GY$boxplot_gt
+
+#######################################################################
+
+# Function 6 - Across Trials Correlation
+across_trials <- across_trials_correlation(selected_data, "Título", traits)
+across_trials
+```
+
+## Outras Anotações
+
+```{r}
+#| label: fig-genotype-comparison
+#| fig-width: 22
+#| fig-height: 8
+#| warning: false
+
 #| label: fig-corr-indiv
 #| layout-ncol: 2
 #| fig-height: 8
 #| warning: false
-
-# Correlation Analysis
-# Standardized Plot Function
-plot_std_corr <- function(df, title_name, type = "upper") {
-  
-  # 1. Select traits
-  df_sub <- df %>% 
-    select(all_of(traits)) %>% 
-    mutate(across(everything(), as.numeric))
-  
-  # 2. Filter out columns with SD = 0
-  cols_to_keep <- sapply(df_sub, function(x) sd(x, na.rm = TRUE) > 0)
-  df_filtered <- df_sub[, cols_to_keep, drop = FALSE]
-  
-  # 3. Correlation Matrix
-  m <- cor(df_filtered, use = "complete.obs")
-  
-  # 4. Plotting with standardized visual style
-  corrplot(m, 
-           method = "color",           
-           type = type,               
-           addCoef.col = "black",      
-           tl.col = "black",           
-           diag = TRUE,                
-           number.cex = 0.7,           
-           tl.srt = 45,                
-           title = paste("\nLocation:", title_name),
-           mar = c(0,0,2,0))          
-}
-
-
-
-# individual plots 
-plot_std_corr(trial_1, "L0118")
-plot_std_corr(trial_2, "L0133")
-plot_std_corr(trial_3, "L074")
-plot_std_corr(trial_4, "L0134")
-
 
 #| label: fig-corr-all
 #| fig-height: 10
 #| fig-cap: "Correlation"
 #| warning: false
 
-#  all trial data into a single dataframe for across-trial analysis
-all_trials <- bind_rows(trial_1, trial_2, trial_3, trial_4) %>%
-  mutate(across(all_of(traits), as.numeric))
+#indiviual plots
+boxplot_genotype_all_in_one(selected_data, "FLW_DAYS")
+boxplot_genotype_all_in_one(selected_data, "GY")
+boxplot_genotype_all_in_one(selected_data, "PL_EMERG_COUNT")
+boxplot_genotype_all_in_one(selected_data, "Pod_Shattering")
 
-# correlation matrix
-cor_total <- cor(all_trials %>% select(all_of(traits)), use = "complete.obs")
-corrplot(cor_total, 
-         method = "color", 
-         type = "full", 
-         addCoef.col = "black", 
-         tl.col = "black", 
-         diag = TRUE,
-         title = "\nCORRELATION_ALL TRIALS",
-         mar = c(0,0,2,0))
+#plot PH_R8, filtring outlier (16  Zambia 2023 E0283 G321 L0118 // 308.33)
+all_trials_cleanPH_R8 <- selected_data %>%
+  filter(PH_R8 > 10 & PH_R8 < 160) 
+boxplot_genotype_all_in_one(all_trials_cleanPH_R8 , "PH_R8")
 
+across_trials_correlation(selected_data, "Titulo", traits)
 ```
-
-```{r}
-# Function - Across Trials Comparison
-```
-
-# Trial 1 - Local "L0118" / Year "2023"
-
-```{r}
-
-# Trial Summary
-T1_summary <- trial_summary(trial_1, "Trial 1", traits, 30)
-T1_summary$stats
-T1_summary$correlation
-T1_summary$boxplot
-T1_summary$density
-T1_summary$histogram
-
-# Graphs for each trial
-
-results <- list()
-trials <- list(trial_1, trial_2, trial_3, trial_4)
-for(i in seq_along(trials)){
-  results[[i]] <- trial_summary(trials[[i]],"i", traits, 30)
-}
-
-results[[1]]$boxplot
-
-# Trait By Genotype
-aa <- boxplot_by_genotype(trial_1, "Trial 1", "GY", "GY (kg/ha)")
-aa
-```
-
-## A FAZER
-
-2\) Calcular correlacao (matriz) e comparar com valor do scatter plot
-
-3\) Verificar as medidas de posicao e dispersao
-
-4\) Explicar genotipos do experimento, e cada trait analisado.
-
-5\) Critério para outliers (Trial 1 tem 1 outlier na altura)
-
-6\) Fazer funcao para comparar caracteristicas de trials de diferentes anos
-
-7\) Interpretações
