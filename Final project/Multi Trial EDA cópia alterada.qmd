@@ -40,6 +40,7 @@ library(knitr)
 library(kableExtra)
 library(grid)
 library(ggcorrplot)
+library(patchwork)
 
 # Loading data (Zambia)
 data = read.csv("https://raw.githubusercontent.com/mauricioaraujj/Pan_African_Trials_Network/refs/heads/main/data/data.csv", sep = ';') |> filter(COUNTRY == "Zambia") 
@@ -73,23 +74,19 @@ trial_4 <- selected_data |> filter(trial == "4")
 genotypes_4 <- trial_4$gen
 ```
 
-To quantify the phenotypic variation among the genotypes and experimental precision across the four locations, a summary of descriptive statistics was compiled (Table 1). This includes measures of central tendency, such as the mean and median, alongside dispersion metrics such as standard deviation and the Coefficient of Variation (CV%). 
+To quantify the phenotypic variation among the genotypes and experimental precision across the four locations, a summary of descriptive statistics was compiled (@tabela-trait-local). This includes measures of central tendency, such as the mean and median, alongside dispersion metrics such as standard deviation and the Coefficient of Variation (CV%). 
 
 
 ```{r}
 #| warning: FALSE
 #| label: tabela-trait-local
-#| tbl-cap: "Medidas de tendência central e dispersão dos experimentos performados na Zâmbia"
+#| tbl-cap: "Summary Statistics of soybean traits across four locations in Zambia"
 
-trial_summary <- function(df, title, traits, bins){
-  
-  # Dataframe long
+# individual trial analysis
+trial_summary <- function(df, title, traits, bins) {
   df_long <- df |>
-    pivot_longer(cols = all_of(traits),
-      names_to = "Variable",
-      values_to = "value")
+    pivot_longer(cols = all_of(traits), names_to = "Variable", values_to = "value")
   
-  # Measures of Position and Dispersion - Quantitative Variable
   stats_df <- df_long |>
     group_by(Variable) |>
     summarise(
@@ -99,120 +96,60 @@ trial_summary <- function(df, title, traits, bins){
       sd = sd(value, na.rm = TRUE),
       min = min(value, na.rm = TRUE),
       max = max(value, na.rm = TRUE),
-      range = max(value, na.rm = TRUE) - min(value, na.rm = TRUE),)
-      cv = (sd/mean)*100 |> 
+      range = max(value, na.rm = TRUE) - min(value, na.rm = TRUE),
+      cv = (sd / mean) * 100 
+    ) |> 
     mutate(across(where(is.numeric), ~round(.x, 3)))
   
-  # Correlation between traits
-  cor_mat <- df |>
-    select(all_of(traits)) |>
-    cor(use = "complete.obs")
+  cor_mat <- cor(df |> select(all_of(traits)), use = "complete.obs")
+  p1 <- ggcorrplot(cor_mat, hc.order = TRUE, type = "upper", lab = TRUE, title = title)
   
-  p1 <-ggcorrplot(cor_mat, 
-           hc.order = TRUE,           
-           type = "upper",               
-           lab = TRUE,      
-           lab_size = 3,           
-           colors = c("red", "white", "blue"),      
-           title = title)   
-  
-  # Traits Boxplots
   p2 <- ggplot(df_long, aes(x = value, y = Variable, fill = Variable)) +
-        geom_boxplot(alpha = 0.7) +
-        facet_wrap(~Variable, scales = "free") +
-        geom_point(data = stats_df, aes(x = mean, y = Variable),
-          shape = 17, color = "#10342d", size = 2) +
-        scale_fill_brewer(palette = "Set2") +
-        labs(title = title,
-          x = "Values",
-          y = "",
-          fill = "Trait") +
-        theme_minimal() +
-        theme(axis.text.y = element_blank(),text = element_text(size = 18))
-  
-  # Traits Density Plot
-  p3 <- ggplot(df_long, aes(x = value, fill = Variable)) +
-        geom_density(alpha = 0.6, show.legend = FALSE) +
-        geom_vline(data = stats_df, aes(xintercept = mean),
-          linetype = "dashed", linewidth = 0.8, show.legend = FALSE) +
-        geom_text(data = stats_df,aes(x = mean, y = Inf, label = round(mean, 2)),
-          vjust = 1.5,hjust = -0.4 ,size = 3.5, color = "black") +
-        facet_wrap(~Variable, scales = "free") +
-        scale_fill_brewer(palette = "Set2") +
-        labs(
-          title = paste(title),
-          x = "Value",
-          y = "Density") +
-        theme_minimal() +
-        theme(text = element_text(size = 18))
-  
-  # Traits Histogram
-  p4 <- ggplot(df_long, aes(x = value, fill = Variable)) + 
-        geom_histogram(bins = 30, color = "white", 
-          alpha = 0.7, show.legend = FALSE) + 
-        facet_wrap(~Variable, scales = "free") +
-        scale_fill_brewer(palette = "Set2") +
-        labs(title = title,
-          x = "Value", 
-          y = "Count") + 
-        theme_minimal() +
-        theme(text = element_text(size = 18))
-  
-  return(list(stats = stats_df,correlation = p1,boxplot = p2, density = p3, histogram = p4))
+        geom_boxplot(alpha = 0.7) + facet_wrap(~Variable, scales = "free") +
+        geom_point(data = stats_df, aes(x = mean, y = Variable), shape = 17) +
+        theme_minimal()
+  return(list(stats = stats_df, correlation = p1, boxplot = p2))
 }
 
-# characterization of each trial
+# Loop
+traits_list <- c("FLW_DAYS", "GY", "PH_R8", "PL_EMERG_COUNT", "Pod_Shattering")
+envs_list   <- c("L0118", "L0133", "L074", "L0134")
+trials_data <- list(trial_1, trial_2, trial_3, trial_4)
+
 all_trials_summary <- list()
-trials <- list(trial_1, trial_2, trial_3, trial_4)
 
-for(i in seq_along(trials)){
-  title <- paste("Trial", i)
-  all_trials_summary[[i]] <- trial_summary(trials[[i]],title, traits, 30)
+for(i in seq_along(trials_data)) {
+  all_trials_summary[[i]] <- trial_summary(trials_data[[i]], envs_list[i], traits_list, 30)
 }
 
 
-envs <- c("L0118", "L0133", "L074", "L099")
-traits <- c("FLW_DAYS", "GY", "PH_R8", "PL_EMERG_COUNT", "Pod_Shattering")
 df_empilhado <- map_df(seq_along(all_trials_summary), function(i) {
   all_trials_summary[[i]]$stats |> 
-    mutate(Local = envs[i]) 
+    mutate(Local = envs_list[i])
 })
 
+# kable
 df_para_tabela <- df_empilhado |>
-    pivot_longer(
-    cols = c(mean, median, variance, sd, min, max, range), 
-    names_to = "Estatistica", 
-    values_to = "Valor"
+  mutate(Variable = factor(Variable, levels = traits_list)) |> 
+  pivot_longer(
+    cols = c(mean, median, variance, sd, cv, min, max, range), 
+    names_to = "Statistic", 
+    values_to = "Value"
   ) |>
-  mutate(Estatistica = case_match(Estatistica,
-    "mean" ~ "Média",
-    "median" ~ "Mediana",
-    "variance" ~ "Variância",
-    "sd" ~ "Desvio Padrão",
-    "min" ~ "Mínimo",
-    "max" ~ "Máximo",
-    "range" ~ "Amplitude"
-  )) |>
-  pivot_wider(names_from = c(Variable, Local), values_from = Valor)
+  mutate(Statistic = factor(Statistic, 
+                            levels = c("mean", "median", "variance", "sd", "cv", "min", "max", "range"),
+                            labels = c("Mean", "Median", "Variance", "Std. Deviation", "CV (%)", "Minimum", "Maximum", "Range"))) |>
+  pivot_wider(names_from = c(Variable, Local), values_from = Value) |>
+  arrange(Statistic)
 
-n_traits <- 5
-n_locais <- 4
-
-cabecalho_superior <- c(" " = 1)
-cabecalho_superior[traits] <- n_locais 
+# table
+header_top <- c(" " = 1)
+for(t in traits_list) { header_top[t] <- length(envs_list) }
 
 df_para_tabela |>
-  kable(
-    digits = 2,
-    align = "l",
-    col.names = c(" ", rep(envs, n_traits)), 
-    caption = "Measures of central tendency and dispersion of the five traits and four locations"
-  ) |>
-  kable_styling(
-    bootstrap_options = c("striped", "hover", "condensed"), 
-    full_width = FALSE
-  ) |>
-  add_header_above(cabecalho_superior) |>
+  kable(digits = 2, align = "l", col.names = c("Statistic", rep(envs_list, length(traits_list)))) |>
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE) |>
+  add_header_above(header_top) |>
   column_spec(1, bold = TRUE, border_right = TRUE)
 ```
 
@@ -273,6 +210,82 @@ boxplot_by_genotype <- function(df, title, trait, trait_lab){
 
 ```
 
+# Analysis between genotypes
+
+Regarding the boxplot analyses performed by trait, comparing genotypes and environments, clear trends can be observed. For the Grain Yield (GY) trait, mean values are consistently higher across almost all genotypes in environment L0134. This location stands out as a high-potential environment, likely providing optimal edaphoclimatic conditions that allowed the germplasm to express its maximum genetic potential.
+
+```{r}
+# Function 5 - All Trials Boxplot By Genotype 
+boxplot_genotype_all_in_one <- function(df, trait) {
+  
+  # Boxplot by Genotype and Trial
+  p1 <- ggplot(df, aes(x = reorder(gen, !!sym(trait)), y = !!sym(trait), fill = trial)) +
+        geom_boxplot(alpha = 0.7, outlier.shape = NA, na.rm = TRUE) + 
+        labs(
+          title = paste("Performance Across Trials:", trait),
+          x = "Genotypes",
+          y = trait,
+          fill = "Trial"
+        ) +
+        theme_minimal() +
+        theme(
+          axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 8),
+          legend.position = "top",
+          panel.grid.minor = element_blank())
+        
+  # Boxplot by Genotype
+  p2 <- ggplot(df, aes(x = reorder(gen, !!sym(trait)), y = !!sym(trait))) +
+        geom_boxplot(fill = "grey80", color = "black", outlier.shape = NA,na.rm = TRUE) +
+        geom_jitter(aes(color = trial),width = 0.2,size = 1.2,alpha = 0.8, na.rm = TRUE) +
+        labs(
+          title = paste("Performance Across Trials:", trait),
+          x = "Genotypes",
+          y = trait,
+          color = "Trial") +
+        theme_minimal() +
+        theme(
+          axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 8),
+          legend.position = "top",
+          panel.grid.minor = element_blank())
+   
+  return (list(boxplot_gt_trial = p1, boxplot_gt = p2))
+}
+#| label: fig-genotype-comparison
+#| fig-width: 22
+#| fig-height: 8
+#| warning: false
+
+#| label: fig-corr-indiv
+#| layout-ncol: 2
+#| fig-height: 8
+#| warning: false
+
+#| label: fig-corr-all
+#| fig-height: 10
+#| fig-cap: "Correlation"
+#| warning: false
+
+#indiviual plots
+g1 <- boxplot_genotype_all_in_one(selected_data, "FLW_DAYS")
+g2 <- boxplot_genotype_all_in_one(selected_data, "GY")
+g3 <- boxplot_genotype_all_in_one(selected_data, "PL_EMERG_COUNT")
+g4 <- boxplot_genotype_all_in_one(selected_data, "Pod_Shattering")
+
+g1[[1]]/ g1[[2]]
+```
+
+In contrast, the genotypes did not perform well for this trait in environment L0118. The overall shift toward lower yield values in this specific location suggests a restrictive environment, possibly due to soil limitations or water stress during critical stages of crop development. This marked difference between L0134 and L0118 highlights a strong Environmental Effect, which is a fundamental component in evaluating the adaptability and stability of these genotypes across the Zambian landscape.
+
+```{r}
+g2[[1]]/ g2[[2]]
+```
+
+Regarding the flowering cycle (FLW_DAYS), it is observed that environment L0133 promotes a longer vegetative period, leading to later flowering for the vast majority of genotypes. This contrasts sharply with the earliness observed in environment L0134. As for plant emergence (PL_EMERG_COUNT), a clear trend of superiority is noted in environment L0133, which exhibited higher mean stands for most genotypes compared to the other locations; the remaining environments showed no significant differentiation among themselves. Finally, regarding plant height (PH_R8), environment L0118 stood out negatively, showing a consistent trend of lower mean values across nearly all genotypes when compared to the other environments.
+
+```{r}
+g3[[1]]/ g3[[2]]
+g4[[1]]/ g4[[2]]
+```
 
 
 
@@ -517,6 +530,8 @@ across_trials_correlation <- function(df, title, traits) {
   
   return(all_cor = p1)
 }
+
+
 ```
 
 # Trials Overview
@@ -615,7 +630,7 @@ all_trials_cleanPH_R8 <- selected_data %>%
   filter(PH_R8 > 10 & PH_R8 < 160) 
 boxplot_genotype_all_in_one(all_trials_cleanPH_R8 , "PH_R8")
 
-across_trials_correlation(selected_data, "Titulo", traits)
+across_trials_correlation(selected_data, " ", traits)
 ```
 
 ```{r}
