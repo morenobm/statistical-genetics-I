@@ -21,6 +21,17 @@ format:
     embed-resources: true
 ---
 
+```{r}
+#| label: setup
+#| include: false
+
+knitr::opts_chunk$set(
+  fig.show = "hold",
+  warning = FALSE,
+  message = FALSE,
+  results = "hold")
+```
+
 # Exercise
 
 Using the dataset you will use in the project, perform a comprehensive exploratory data analysis. Choose four trials and perform EDA for five traits (if available). Check the variation, detect outliers and possible errors, build histograms, density plots and boxplots; compute measures of central tendency and dispersion, and investigate the relationship between traits. Finally, perform an across trials EDA: check if there is any major changes within traits across trials.
@@ -28,13 +39,13 @@ Using the dataset you will use in the project, perform a comprehensive explorato
 # Database selection - Zambia
 
 ```{r}
-#| warning: false
 
 # Loading packages
 library(ggplot2)
 library(patchwork)
 library(tidyr)
 library(dplyr)
+library(purrr)
 library(knitr)
 library(kableExtra)
 library(grid)
@@ -75,7 +86,6 @@ genotypes_4 <- trial_4$gen
 # Functions
 
 ```{r}
-#| warning: false
 
 # Function 1 - Single Trial Summary
 trial_summary <- function(df, title, traits, bins){
@@ -206,8 +216,8 @@ boxplot_by_genotype <- function(df, title, trait, trait_lab){
           y = trait_lab,
           fill = "Mean") +
         theme_minimal() +
-        theme(axis.text.y = element_blank(),text = element_text(size = 18)) +
-        theme(axis.text.x = element_text(size = 10))
+        theme(axis.text.y = element_text(size = 10)) +
+        theme(axis.text.x = element_text(size = 8))
   
   return (boxplot_genotypes = p1)
 }
@@ -248,7 +258,7 @@ boxplot_genotype_all_in_one <- function(df, trait) {
   p1 <- ggplot(df, aes(x = reorder(gen, !!sym(trait)), y = !!sym(trait), fill = trial)) +
         geom_boxplot(alpha = 0.7, outlier.shape = NA, na.rm = TRUE) + 
         labs(
-          title = paste("Performance Across Trials:", trait),
+          title = paste("All Trials Boxplot:", trait),
           x = "Genotypes",
           y = trait,
           fill = "Trial"
@@ -264,7 +274,7 @@ boxplot_genotype_all_in_one <- function(df, trait) {
         geom_boxplot(fill = "grey80", color = "black", outlier.shape = NA,na.rm = TRUE) +
         geom_jitter(aes(color = trial),width = 0.2,size = 1.2,alpha = 0.8, na.rm = TRUE) +
         labs(
-          title = paste("Performance Across Trials:", trait),
+          title = paste("All Trials Boxplot:", trait),
           x = "Genotypes",
           y = trait,
           color = "Trial") +
@@ -284,7 +294,7 @@ across_trials_correlation <- function(df, title, traits) {
   # Correlation Plot with all trials
   cor_total <- df |>
     select(all_of(traits)) |>
-    cor(use = "complete.obs")
+    cor(use = "pairwise.complete.obs")
 
   p1 <-ggcorrplot(cor_total, 
          hc.order = TRUE,           
@@ -302,112 +312,25 @@ across_trials_correlation <- function(df, title, traits) {
 
 Explicar genotipos do experimento, e cada trait analisado.
 
-# Trial 1 - Local "L0118" / Year "2023"
-
-## A FAZER
-
-1\) Listar os genotipos do experimento, e explicar cada trait analisado.
-
-2\) Fazer um exemplo manual para verificar as medidas de posição, dispersão, correlação e funcções
-
-3\) Definir critério de avaliação para os outliers (Trial 1 tem 1 outlier na altura)
-
-4\) Rodar as funções para cada Trial e depois entre Trials
-
-5\) Organizar documentos e fazer as interpretações
-
-## Uso das Funções
+Revisar tabela
 
 ```{r}
-#| warning: false
+#| label: tabela-trait-local
+#| tbl-cap: "Measures of central tendency and dispersion of trials conducted in Zambia"
 
-## Function 1 - Single Trial Summary
+# Function 1 - Single Trials Summary
 all_trials_summary <- list()
 trials <- list(trial_1, trial_2, trial_3, trial_4)
 for(i in seq_along(trials)){
   title <- paste("Trial", i)
-  all_trials_summary[[i]] <- trial_summary(trials[[i]],title, traits, 30)
+  all_trials_summary[[i]] <- trial_summary(trials[[i]],title, traits, 50)
 }
 
-# Example - Trial 1
-all_trials_summary[[1]]$stats
-all_trials_summary[[1]]$correlation
-all_trials_summary[[1]]$density
-all_trials_summary[[1]]$boxplot
-all_trials_summary[[1]]$histogram
-
-#######################################################################
-
-## Function 2 - Single Trial Pairwise Scatter plot
-pairwise_scatter(trial_2,"Título", "GY", "PH_R8", "GY (kg/ha)", "PH (cm)")
-
-######################################################################
-
-## Function 3 - Single Trial Boxplot by Genotype
-boxplot_by_genotype(trial_1,"Título", "GY", "GY (kg/ha)")
-
-######################################################################
-
-## Function 4 - Single Trials Analysis Together
-all_trials_together <- single_trials_together(selected_data, "Título", traits)
-
-# Outputs
-all_trials_together$density
-all_trials_together$boxplot
-
-#######################################################################
-
-# Function 5 - All Trials Boxplot By Genotype
-all_genotype_GY <- boxplot_genotype_all_in_one(selected_data,"GY")
-all_genotype_GY$boxplot_gt_trial
-all_genotype_GY$boxplot_gt
-
-#######################################################################
-
-# Function 6 - Across Trials Correlation
-across_trials <- across_trials_correlation(selected_data, "Título", traits)
-across_trials
-```
-
-## Outras Anotações
-
-```{r}
-#| label: fig-genotype-comparison
-#| fig-width: 22
-#| fig-height: 8
-#| warning: false
-
-#| label: fig-corr-indiv
-#| layout-ncol: 2
-#| fig-height: 8
-#| warning: false
-
-#| label: fig-corr-all
-#| fig-height: 10
-#| fig-cap: "Correlation"
-#| warning: false
-
-#indiviual plots
-boxplot_genotype_all_in_one(selected_data, "FLW_DAYS")
-boxplot_genotype_all_in_one(selected_data, "GY")
-boxplot_genotype_all_in_one(selected_data, "PL_EMERG_COUNT")
-boxplot_genotype_all_in_one(selected_data, "Pod_Shattering")
-
-#plot PH_R8, filtring outlier (16  Zambia 2023 E0283 G321 L0118 // 308.33)
-all_trials_cleanPH_R8 <- selected_data %>%
-  filter(PH_R8 > 10 & PH_R8 < 160) 
-boxplot_genotype_all_in_one(all_trials_cleanPH_R8 , "PH_R8")
-
-across_trials_correlation(selected_data, "Titulo", traits)
-```
-```{r}
-#| warning: FALSE
-#| label: tabela-trait-local
-#| tbl-cap: "Medidas de tendência central e dispersão dos experimentos performados na Zâmbia"
-envs <- c("L0118", "L0133", "L074", "L099")
+# Table 
+envs <- c("T1", "T2", "T3", "T4")
 traits <- c("FLW_DAYS", "GY", "PH_R8", "PL_EMERG_COUNT", "Pod_Shattering")
-df_empilhado <- map_df(seq_along(results), function(i) {
-  results[[i]]$stats |> 
+df_empilhado <- map_df(seq_along(all_trials_summary), function(i) {
+  all_trials_summary[[i]]$stats |> 
     mutate(Local = envs[i]) 
 })
 
@@ -418,14 +341,14 @@ df_para_tabela <- df_empilhado |>
     values_to = "Valor"
   ) |>
    mutate(Estatistica = case_match(Estatistica,
-    "mean" ~ "Média",
-    "median" ~ "Mediana",
-    "variance" ~ "Variância",
-    "sd" ~ "Desvio Padrão",
-    "min" ~ "Mínimo",
-    "max" ~ "Máximo",
-    "range" ~ "Amplitude"
-  )) |>
+    "mean" ~ "Mean",
+    "median" ~ "Median",
+    "variance" ~ "Variance",
+    "sd" ~ "Sd",
+    "min" ~ "Min",
+    "max" ~ "Max",
+    "range" ~ "Range"
+  )) |> 
   pivot_wider(names_from = c(Variable, Local), values_from = Valor)
 
 n_traits <- 5
@@ -439,7 +362,7 @@ df_para_tabela |>
     digits = 2,
     align = "l",
     col.names = c(" ", rep(envs, n_traits)), 
-    caption = "Medidas de tendência central e dispersão dos experimentos performados na Zâmbia"
+    caption = "Measures of central tendency and dispersion of trials conducted in Zambia"
   ) |>
   kable_styling(
     bootstrap_options = c("striped", "hover", "condensed"), 
@@ -448,3 +371,190 @@ df_para_tabela |>
   add_header_above(cabecalho_superior) |>
   column_spec(1, bold = TRUE, border_right = TRUE)
 ```
+
+```{r}
+
+# Removing outlier
+trial_1 <- trial_1 |> 
+  mutate(PH_R8 = ifelse(PH_R8 > 200, NA, PH_R8))
+selected_data <- selected_data |> 
+  mutate(PH_R8 = ifelse(PH_R8 > 200, NA, PH_R8))
+
+# Function 1 - Single Trials Summary
+all_trials_summary <- list()
+trials <- list(trial_1, trial_2, trial_3, trial_4)
+for(i in seq_along(trials)){
+  title <- paste("Trial", i)
+  all_trials_summary[[i]] <- trial_summary(trials[[i]],title, traits, 50)
+}
+```
+
+```{r}
+# Function 4 - Single Trials General Overview
+all_trials_together <- single_trials_together(selected_data, "All Trials Overview", traits)
+
+all_trials_together$density
+all_trials_together$boxplot
+
+# Function 5 - All Trials Boxplot By Genotype
+# Grain Yield
+all_genotype_GY <- boxplot_genotype_all_in_one(selected_data,"GY")
+all_genotype_GY$boxplot_gt_trial
+all_genotype_GY$boxplot_gt
+
+# Plant Height
+all_genotype_PH <- boxplot_genotype_all_in_one(selected_data,"PH_R8")
+all_genotype_PH$boxplot_gt_trial
+all_genotype_PH$boxplot_gt
+
+# Pod_Shattering
+all_genotype_PS <- boxplot_genotype_all_in_one(selected_data,"Pod_Shattering")
+all_genotype_PS$boxplot_gt_trial
+all_genotype_PS$boxplot_gt
+
+# Days to Flowering
+all_genotype_FL <- boxplot_genotype_all_in_one(selected_data,"FLW_DAYS")
+all_genotype_FL$boxplot_gt_trial
+all_genotype_FL$boxplot_gt
+
+# Plant Emergence
+all_genotype_PL <- boxplot_genotype_all_in_one(selected_data,"PL_EMERG_COUNT")
+all_genotype_PL$boxplot_gt_trial
+all_genotype_PL$boxplot_gt
+
+# Function 6 - Across Trials Correlation
+across_trials_corr <- across_trials_correlation(selected_data, "Across Trials Correlation", traits)
+across_trials_corr
+```
+
+# Trial 1 - Local "L0118" / Year "2023"
+
+```{r}
+
+# Trial 1
+all_trials_summary[[1]]$stats
+all_trials_summary[[1]]$correlation
+all_trials_summary[[1]]$density
+all_trials_summary[[1]]$boxplot
+all_trials_summary[[1]]$histogram
+
+# Function 2 - Single Trial Pairwise Scatter Plot
+pairwise_scatter(trial_1,"Trial 1", "GY", "PH_R8", "GY (kg/ha)", "PH (cm)")
+pairwise_scatter(trial_1,"Trial 1", "GY", "FLW_DAYS", "GY (kg/ha)", "Days to Flowering")
+pairwise_scatter(trial_1,"Trial 1", "GY", "PL_EMERG_COUNT", "GY (kg/ha)", "Plant Emergence")
+pairwise_scatter(trial_1,"Trial 1", "GY", "Pod_Shattering", "GY (kg/ha)", "Pod_Shattering score")
+pairwise_scatter(trial_1,"Trial 1", "Pod_Shattering", "PH_R8", "Pod_Shattering score", "PH (cm)")
+pairwise_scatter(trial_1,"Trial 1", "Pod_Shattering", "FLW_DAYS", "Pod_Shattering score", "Days to Flowering")
+pairwise_scatter(trial_1,"Trial 1", "Pod_Shattering", "PL_EMERG_COUNT", "Pod_Shattering score", "Plant Emergence")
+pairwise_scatter(trial_1,"Trial 1", "PL_EMERG_COUNT", "PH_R8", "Plant Emergence", "PH (cm)")
+pairwise_scatter(trial_1,"Trial 1", "PL_EMERG_COUNT", "FLW_DAYS", "Plant Emergence", "Days to Flowering")
+pairwise_scatter(trial_1,"Trial 1", "FLW_DAYS", "PH_R8", "Days to Flowering", "PH (cm)")
+
+# Function 3 - Single Trial Boxplot by Genotype
+boxplot_by_genotype(trial_1,"Trial 1", "GY", "GY (kg/ha)")
+boxplot_by_genotype(trial_1,"Trial 1", "PH_R8", "PH (cm)")
+boxplot_by_genotype(trial_1,"Trial 1", "FLW_DAYS", "Days to Flowering")
+boxplot_by_genotype(trial_1,"Trial 1", "Pod_Shattering", "Pod_Shattering score")
+boxplot_by_genotype(trial_1,"Trial 1", "PL_EMERG_COUNT", "Plant Emergence")
+```
+
+# Trial 2 - Local "L0133" / Year "2023"
+
+```{r}
+
+# Trial 2
+all_trials_summary[[2]]$stats
+all_trials_summary[[2]]$correlation
+all_trials_summary[[2]]$density
+all_trials_summary[[2]]$boxplot
+all_trials_summary[[2]]$histogram
+
+# Function 2 - Single Trial Pairwise Scatter Plot
+pairwise_scatter(trial_2,"Trial 2", "GY", "PH_R8", "GY (kg/ha)", "PH (cm)")
+pairwise_scatter(trial_2,"Trial 2", "GY", "FLW_DAYS", "GY (kg/ha)", "Days to Flowering")
+pairwise_scatter(trial_2,"Trial 2", "GY", "PL_EMERG_COUNT", "GY (kg/ha)", "Plant Emergence")
+pairwise_scatter(trial_2,"Trial 2", "GY", "Pod_Shattering", "GY (kg/ha)", "Pod_Shattering score")
+pairwise_scatter(trial_2,"Trial 2", "Pod_Shattering", "PH_R8", "Pod_Shattering score", "PH (cm)")
+pairwise_scatter(trial_2,"Trial 2", "Pod_Shattering", "FLW_DAYS", "Pod_Shattering score", "Days to Flowering")
+pairwise_scatter(trial_2,"Trial 2", "Pod_Shattering", "PL_EMERG_COUNT", "Pod_Shattering score", "Plant Emergence")
+pairwise_scatter(trial_2,"Trial 2", "PL_EMERG_COUNT", "PH_R8", "Plant Emergence", "PH (cm)")
+pairwise_scatter(trial_2,"Trial 2", "PL_EMERG_COUNT", "FLW_DAYS", "Plant Emergence", "Days to Flowering")
+pairwise_scatter(trial_2,"Trial 2", "FLW_DAYS", "PH_R8", "Days to Flowering", "PH (cm)")
+
+# Function 3 - Single Trial Boxplot by Genotype
+boxplot_by_genotype(trial_2,"Trial 2", "GY", "GY (kg/ha)")
+boxplot_by_genotype(trial_2,"Trial 2", "PH_R8", "PH (cm)")
+boxplot_by_genotype(trial_2,"Trial 2", "FLW_DAYS", "Days to Flowering")
+boxplot_by_genotype(trial_2,"Trial 2", "Pod_Shattering", "Pod_Shattering score")
+boxplot_by_genotype(trial_2,"Trial 2", "PL_EMERG_COUNT", "Plant Emergence")
+```
+
+# Trial 3 - Local "L074" / Year "2023"
+
+```{r}
+# Trial 3
+all_trials_summary[[3]]$stats
+all_trials_summary[[3]]$correlation
+all_trials_summary[[3]]$density
+all_trials_summary[[3]]$boxplot
+all_trials_summary[[3]]$histogram
+
+# Function 2 - Single Trial Pairwise Scatter Plot
+pairwise_scatter(trial_3,"Trial 3", "GY", "PH_R8", "GY (kg/ha)", "PH (cm)")
+pairwise_scatter(trial_3,"Trial 3", "GY", "FLW_DAYS", "GY (kg/ha)", "Days to Flowering")
+pairwise_scatter(trial_3,"Trial 3", "GY", "PL_EMERG_COUNT", "GY (kg/ha)", "Plant Emergence")
+pairwise_scatter(trial_3,"Trial 3", "GY", "Pod_Shattering", "GY (kg/ha)", "Pod_Shattering score")
+pairwise_scatter(trial_3,"Trial 3", "Pod_Shattering", "PH_R8", "Pod_Shattering score", "PH (cm)")
+pairwise_scatter(trial_3,"Trial 3", "Pod_Shattering", "FLW_DAYS", "Pod_Shattering score", "Days to Flowering")
+pairwise_scatter(trial_3,"Trial 3", "Pod_Shattering", "PL_EMERG_COUNT", "Pod_Shattering score", "Plant Emergence")
+pairwise_scatter(trial_3,"Trial 3", "PL_EMERG_COUNT", "PH_R8", "Plant Emergence", "PH (cm)")
+pairwise_scatter(trial_3,"Trial 3", "PL_EMERG_COUNT", "FLW_DAYS", "Plant Emergence", "Days to Flowering")
+pairwise_scatter(trial_3,"Trial 3", "FLW_DAYS", "PH_R8", "Days to Flowering", "PH (cm)")
+
+# Function 3 - Single Trial Boxplot by Genotype
+boxplot_by_genotype(trial_3,"Trial 3", "GY", "GY (kg/ha)")
+boxplot_by_genotype(trial_3,"Trial 3", "PH_R8", "PH (cm)")
+boxplot_by_genotype(trial_3,"Trial 3", "FLW_DAYS", "Days to Flowering")
+boxplot_by_genotype(trial_3,"Trial 3", "Pod_Shattering", "Pod_Shattering score")
+boxplot_by_genotype(trial_3,"Trial 3", "PL_EMERG_COUNT", "Plant Emergence")
+```
+
+# Trial 4 - Local "L0134" / Year "2023"
+
+```{r}
+# Trial 4
+all_trials_summary[[4]]$stats
+all_trials_summary[[4]]$correlation
+all_trials_summary[[4]]$density
+all_trials_summary[[4]]$boxplot
+all_trials_summary[[4]]$histogram
+
+# Function 2 - Single Trial Pairwise Scatter Plot
+pairwise_scatter(trial_4,"Trial 4", "GY", "PH_R8", "GY (kg/ha)", "PH (cm)")
+pairwise_scatter(trial_4,"Trial 4", "GY", "FLW_DAYS", "GY (kg/ha)", "Days to Flowering")
+pairwise_scatter(trial_4,"Trial 4", "GY", "PL_EMERG_COUNT", "GY (kg/ha)", "Plant Emergence")
+pairwise_scatter(trial_4,"Trial 4", "GY", "Pod_Shattering", "GY (kg/ha)", "Pod_Shattering score")
+pairwise_scatter(trial_4,"Trial 4", "Pod_Shattering", "PH_R8", "Pod_Shattering score", "PH (cm)")
+pairwise_scatter(trial_4,"Trial 4", "Pod_Shattering", "FLW_DAYS", "Pod_Shattering score", "Days to Flowering")
+pairwise_scatter(trial_4,"Trial 4", "Pod_Shattering", "PL_EMERG_COUNT", "Pod_Shattering score", "Plant Emergence")
+pairwise_scatter(trial_4,"Trial 4", "PL_EMERG_COUNT", "PH_R8", "Plant Emergence", "PH (cm)")
+pairwise_scatter(trial_4,"Trial 4", "PL_EMERG_COUNT", "FLW_DAYS", "Plant Emergence", "Days to Flowering")
+pairwise_scatter(trial_4,"Trial 4", "FLW_DAYS", "PH_R8", "Days to Flowering", "PH (cm)")
+
+# Function 3 - Single Trial Boxplot by Genotype
+boxplot_by_genotype(trial_4,"Trial 4", "GY", "GY (kg/ha)")
+boxplot_by_genotype(trial_4,"Trial 4", "PH_R8", "PH (cm)")
+boxplot_by_genotype(trial_4,"Trial 4", "FLW_DAYS", "Days to Flowering")
+boxplot_by_genotype(trial_4,"Trial 4", "Pod_Shattering", "Pod_Shattering score")
+boxplot_by_genotype(trial_4,"Trial 4", "PL_EMERG_COUNT", "Plant Emergence")
+```
+
+## A FAZER
+
+1\) Listar os genotipos do experimento, e explicar cada trait analisado.
+
+2\) Revisar tabela
+
+3\) Definir critério de avaliação para os outliers (Trial 1 tem 1 outlier na altura)
+
+4\) Organizar cunks, formatar documentos e fazer as interpretações
