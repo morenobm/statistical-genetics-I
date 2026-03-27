@@ -110,6 +110,7 @@ trial_summary <- function(df, title, traits, bins){
       median = median(value, na.rm = TRUE),
       variance = var(value, na.rm = TRUE),
       sd = sd(value, na.rm = TRUE),
+      cv = (sd/mean),
       min = min(value, na.rm = TRUE),
       max = max(value, na.rm = TRUE),
       range = max(value, na.rm = TRUE) - min(value, na.rm = TRUE)) |> 
@@ -340,7 +341,7 @@ df_conc <- map_df(seq_along(all_trials_summary), function(i) {
 
 table_df <- df_conc |>
     pivot_longer(
-    cols = c(mean, median, variance, sd, min, max, range), 
+    cols = c(mean, median, variance, sd, cv, min, max, range), 
     names_to = "Stat", 
     values_to = "Value"
   ) |>
@@ -349,6 +350,7 @@ table_df <- df_conc |>
     "median" ~ "Median",
     "variance" ~ "Variance",
     "sd" ~ "Sd",
+    "cv" ~ "Cv",
     "min" ~ "Min",
     "max" ~ "Max",
     "range" ~ "Range"
@@ -391,11 +393,17 @@ In @tbl-stats-table2 ... Outlier Trial 1 (PH_R8) -\> removing outlier observatio
 ```{r}
 #| label: outlier
 
-# Removing outlier
+# Removing outliers
 trial_1 <- trial_1 |> 
   mutate(PH_R8 = ifelse(PH_R8 > 200, NA, PH_R8))
+trial_3 <- trial_3 |> 
+  mutate(across(all_of(traits),~ if_else(gen == "G216" & env == "E0282", NA_real_ ,.))) |>
+  mutate(FLW_DAYS = ifelse(FLW_DAYS == 0, NA, FLW_DAYS)) 
+
 selected_data <- selected_data |> 
-  mutate(PH_R8 = ifelse(PH_R8 > 200, NA, PH_R8))
+  mutate(PH_R8 = ifelse(PH_R8 > 200, NA, PH_R8)) |> 
+  mutate(across(all_of(traits),~ if_else(gen == "G216" & env == "E0282", NA_real_ ,.))) |> 
+  mutate(FLW_DAYS = ifelse(FLW_DAYS == 0, NA, FLW_DAYS))
 
 # Function 1 - Single Trials Summary
 all_trials_summary <- list()
