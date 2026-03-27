@@ -388,7 +388,7 @@ table_df |>
   column_spec(1, bold = TRUE, border_right = TRUE)
 ```
 
-In @tbl-stats-table2 An outlier was identified for plant height (PH_R8) ( @tbl-stats-table2). This data point was excluded due to its biological anomalousness. It is highly unlikely for a soybean plant to reach 308.33 cm, especially when the trial mean was only 51.34 cm. This inconsistency likely originates from a manual recording error.
+An outlier was identified for plant height (PH_R8) ( @tbl-stats-table2). This data point was excluded due to its biological anomalousness. It is highly unlikely for a soybean plant to reach 308.33 cm, especially when the trial mean was only 51.34 cm. This inconsistency likely originates from a manual recording error.
 
 ```{r}
 #| label: outlier
@@ -433,7 +433,12 @@ all_trials_together$density
 all_trials_together$boxplot
 ```
 
-Analysing the boxplot @fig-all_trials_boxplot aaa
+Regarding the boxplot analyses performed by trait, comparing genotypes and environments, clear trends can be observed. For the Grain Yield (GY) trait, mean values are consistently higher across almost all genotypes in environment L0134 ( @fig-all_trials_boxplot). This location stands out as a high-potential environment, likely providing optimal edaphoclimatic conditions that allowed the germplasm to express its maximum genetic potential.
+
+
+In contrast, the genotypes did not perform well for this trait in environment L0118. The overall shift toward lower yield values in this specific location suggests a restrictive environment, possibly due to soil limitations or water stress during critical stages of crop development. This marked difference between L0134 and L0118 highlights a strong Environmental Effect, which is a fundamental component in evaluating the adaptability and stability of these genotypes across the Zambian landscape.
+Regarding the flowering cycle (FLW_DAYS), it is observed that environment L0133 promotes a longer vegetative period, leading to later flowering for the vast majority of genotypes. This contrasts sharply with the earliness observed in environment L0134. As for plant emergence (PL_EMERG_COUNT), a clear trend of superiority is noted in environment L0133, which exhibited higher mean stands for most genotypes compared to the other locations; the remaining environments showed no significant differentiation among themselves. Finally, regarding plant height (PH_R8), environment L0118 stood out negatively, showing a consistent trend of lower mean values across nearly all genotypes when compared to the other environments.
+
 
 ```{r}
 #| label: fig-gt_boxplot_gy
@@ -490,6 +495,12 @@ all_genotype_PL$boxplot_gt
 #all_genotype_PL$boxplot_gt_trial
 ```
 
+The across-trials analysis revealed that vegetative vigor is a primary driver of yield performance in the Zambia trials, evidenced by the positive correlation of 0.45 between plant height (PH_R8) and grain yield (GY). This relationship indicates that genotypes with greater structural height provide a more robust physiological framework to support reproductive structures, allowing the breeder to use plant height as a stable and easily phenotyped proxy for yield potential. The positive associations between initial stand and development suggest that successful crop establishment is the foundational step in ensuring that the genetic potential for growth is expressed across diverse environmental conditions.
+
+
+In contrast, the strong negative correlations between pod shattering and grain yield (-0.53) highlight a critical bottleneck in the production system, where pre-harvest seed loss acts as a direct constraint on final output. Additionally, the negative relationship between plant stand (PL) and yield (-0.54) suggests the presence of phenotypic plasticity or environmental stress in high-density scenarios, where increased plant populations did not translate into higher productivity. Taken together, these findings demonstrate that while vegetative vigor dictates the yield ceiling, yield stability in Zambia depends fundamentally on mitigating losses through shattering resistance and optimizing population density management.
+
+
 ```{r}
 #| label: fig-across_corr
 #| fig.cap: "Traits Correlation Across Trials"
@@ -502,7 +513,8 @@ across_trials_corr
 
 # Trial 1 - Local "L0118" / Year "2023"
 
-Trait correlations on trial 1 were generally low ( @fig-t1-corr). Pod shattering exhibited a weak positive correlation with grain yield (GY) (0.26), as did plant height at maturity (PH_R8) with days to flowering (FLW_DAYS) (0.25). A significant finding was the negative correlation between FLW_DAYS and GY (-0.45), indicating that early-maturing genotypes are more likely to achieve higher yields in this environment.
+Trait correlations on trial 1 were generally low ( @fig-t1_corr). Pod shattering exhibited a weak positive correlation with grain yield (GY) (0.26), as did plant height at maturity (PH_R8) with days to flowering (FLW_DAYS) (0.25). A significant finding was the negative correlation between FLW_DAYS and GY (-0.45), indicating that early-maturing genotypes are more likely to achieve higher yields in this environment.
+
 
 ```{r}
 #| label: fig-t1_corr
@@ -606,7 +618,6 @@ boxplot_by_genotype(trial_1,"Trial 1", "GY", "GY (kg/ha)")
 
 For plant height (PH_R8), no clear pattern emerged among the boxplot graph. Several materials showed large discrepancies between observations, as evidenced by the high CV (58%), which indicates low experimental precision for this trait. Remarkably, genotypes G072, G214, G244, G245, and G311 showed lower intra-genotypic variation, though they were characterized by shorter stature, except genotype G244.
 
-
 ```{r}
 #| label: fig-t1_box_ph
 #| fig.cap: "Trial 1 Genotypes Boxplot - Plant Height"
@@ -644,6 +655,7 @@ boxplot_by_genotype(trial_1,"Trial 1", "PL_EMERG_COUNT", "Plant Emergence")
 # Trial 2 - Local "L0133" / Year "2023"
 
 The Trial 2 (L0133) stands out as a high-potential environment with strong phenotypic stability for most traits. The mean GY reached 3,676 kg/ha, with a median of 3,712 kg/ha. This symmetry, achieved after the removal of previously identified outliers, indicates a balanced data distribution, allowing for a reliable assessment of genotype performance. The range (1,421 to 5,684 kg/ha) demonstrates that despite being a favorable environment, there is sufficient genetic variability to select superior materials. The density plot for GY confirms this trend, showing a well-defined curve shifted toward high-yield levels.
+
 
 Regarding the crop cycle, the mean of 56.7 days to flowering (FLW_DAYS) confirms that this environment induces a longer cycle. The low standard deviation (5.64) and the narrow peak in the density plot suggest that the genotypes responded uniformly to local photoperiodic or thermal stimuli. However, PL_EMERG_COUNT showed a lot variability (9 to 219 plants) ( @fig-t2_corr). The density plot for emergence displayed a flat and wide base, visually confirming this lack of uniformity ( @fig-t2_dens). 
 
@@ -740,8 +752,10 @@ t2_p10 <- pairwise_scatter(trial_2,"Trial 2", "FLW_DAYS", "PH_R8", "Days to Flow
 (t2_p9 | t2_p10)
 ```
 
-In Trial 2, the most significant contrasts between genotypes are observed in Grain Yield (GY), Plant Height (PH), and plant emergence. Regarding GY, genotypes G072, G076, G137, G143, G194, G216, G219, G246, and G359 stood out with positive performance, while G146, G198, G315, G318, G319, and G321 showed negative highlights, with means settling near 3000 kg/ha  ( @fig-t2_box_gy). In contrast, for PH, genotype G076 presented a negative highlight compared to the others, with a mean height near 60 cm. Interestingly, genotypes G244, G311, G315, G318, G319, and G321 obtained the highest means for height ( @fig-t2_box_ph). This suggests a potential inverse relationship or trade-off in certain materials, where excessive investment in vegetative growth and taller stature (as seen in the G315–G321 group) may be occurring at the expense of grain productivity, whereas compact genotypes like G076 demonstrate a more efficient harvest index. These visual observations align with the correlation analysis, confirming a negative association between PH and GY in this trial, discussed previously.
+In Trial 2, the most significant contrasts between genotypes are observed in Grain Yield (GY), Plant Height (PH), and plant emergence. Regarding GY, genotypes G072, G076, G137, G143, G194, G216, G219, G246, and G359 stood out with positive performance, while G146, G198, G315, G318, G319, and G321 showed negative highlights, with means settling near 3,000 kg/ha  ( @fig-t2_box_gy).
 
+
+In contrast, for PH, genotype G076 presented a negative highlight compared to the others, with a mean height near 60 cm. Interestingly, genotypes G244, G311, G315, G318, G319, and G321 obtained the highest means for height ( @fig-t2_box_ph). This suggests a potential inverse relationship or trade-off in certain materials, where excessive investment in vegetative growth and taller stature (as seen in the G315–G321 group) may be occurring at the expense of grain productivity, whereas compact genotypes like G076 demonstrate a more efficient harvest index. These visual observations align with the correlation analysis, confirming a negative association between PH and GY in this trial, discussed previously.
 
 ```{r}
 #| label: fig-t2_box_gy
@@ -805,9 +819,8 @@ all_trials_summary[[3]]$correlation
 all_trials_summary[[3]]$density
 ```
 
-Analysing the grain yield (GY) information displayed in @fig-t3-hist, @fig-t3-dens and @fig-t3-boxplot, it can be seen that this trial was more productive than the first one, although the values were not higher than in Trial 4. Regarding days to flowering (FLW_DAYS), the mean value was lower than on the previous trials, indicating that the genotypes in this environment may have an early flowering or shorter cycles, even though it can be seen a genetic variation of this trait in @fig-t3-dens. Looking at plant height (PH_R8), the distribution is similar to a normal, and the mean value is slightly smaller than the observed in trials 2 and 4, indicating that this environment may result in shorter plants. For plant emergence (PL_EMERG_COUNT), the mean value is next to 180, however, there is a large variation in this trait, which can be caused by differences in seed germination and vigor, or operational issues during planting. Finally, analysing pod shattering, it is noticeable that most of the genotypes were scored as “1”, while only 6 genotypes were scored as “2”, showing that, in this trial, there were no major issues with pod shattering. 
-The “unusual values” shown in the @fig-t3-boxplot for grain yield and pod shattering were not removed because they are possible values.
-
+Analysing the grain yield (GY) information displayed in @fig-t3_hist, @fig-t3_dens and @fig-t3_box, it can be seen that this trial was more productive than the first one, although the values were not higher than in Trial 4. Regarding days to flowering (FLW_DAYS), the mean value was lower than on the previous trials, indicating that the genotypes in this environment may have an early flowering or shorter cycles, even though it can be seen a genetic variation of this trait in @fig-t3_dens. Looking at plant height (PH_R8), the distribution is similar to a normal, and the mean value is slightly smaller than the observed in trials 2 and 4, indicating that this environment may result in shorter plants. For plant emergence (PL_EMERG_COUNT), the mean value is next to 180, however, there is a large variation in this trait, which can be caused by differences in seed germination and vigor, or operational issues during planting. Finally, analyzing pod shattering, it is noticeable that most of the genotypes were scored as “1”, while only 6 genotypes were scored as “2”, showing that, in this trial, there were no major issues with pod shattering. 
+The “unusual values” shown in the @fig-t3_box for grain yield and pod shattering were not removed because they are possible values.
 
 ```{r}
 #| label: fig-t3_box
@@ -879,7 +892,7 @@ t3_p10 <- pairwise_scatter(trial_3,"Trial 3", "FLW_DAYS", "PH_R8", "Days to Flow
 (t3_p9 | t3_p10)
 ```
 
-In trial 3, the grain yield (GY) information was also analysed at genotype level, as shown in @fig-t3_box_gy. There were genotypes with mean yield around 2000 kg/ha and others with means superior to 4000 kg/ha, indicating that the performance of genotypes are different in this environment. Besides that, it can be seen that in some cases, there is a considerable variation within genotype level, which can be caused by several agronomical, climate and other environmental effects. Ideally, the experimental design and the statistical analysis should be able to deal with this variation. For other traits, the variation within genotypes and across genotypes can also be seen. For example, in plant emergence ( @fig-t3_box_pl), there were genotypes with very slightly variations, while others had almost 50% variation.
+In trial 3, the grain yield (GY) information was also analysed at genotype level, as shown in @fig-t3_box_gy. There were genotypes with mean yield around 2,000 kg/ha and others with means superior to 4000 kg/ha, indicating that the performance of genotypes are different in this environment. Besides that, it can be seen that in some cases, there is a considerable variation within genotype level, which can be caused by several agronomical, climate and other environmental effects. Ideally, the experimental design and the statistical analysis should be able to deal with this variation. For other traits, the variation within genotypes and across genotypes can also be seen. For example, in plant emergence ( @fig-t3_box_pl), there were genotypes with very slightly variations, while others had almost 50% variation.
 
 ```{r}
 #| label: fig-t3_box_gy
