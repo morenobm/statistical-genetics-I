@@ -1,9 +1,7 @@
 ---
-title: "Multi Trial EDA"
+title: "Exploratory Data Analysis"
 author: 
-  - name: João Vitor Sanches Calvo
-    orcid: 0009-0002-5827-6109
-    email: joaovitor.calvo@usp.br
+  - name: Bruna Moreno, Daniele Bononi, João Vitor Calvo, Renan Fantine
     affiliation:
       - name: Department of Genetics, ESALQ-USP
         city: Piracicaba, São Paulo, Brazil
@@ -19,6 +17,8 @@ format:
       light: journal
       dark: darkly
     embed-resources: true
+
+crossref: {}
 ---
 
 ```{r}
@@ -32,13 +32,18 @@ knitr::opts_chunk$set(
   results = "hold")
 ```
 
-# Exercise
+# Introduction
 
-Using the dataset you will use in the project, perform a comprehensive exploratory data analysis. Choose four trials and perform EDA for five traits (if available). Check the variation, detect outliers and possible errors, build histograms, density plots and boxplots; compute measures of central tendency and dispersion, and investigate the relationship between traits. Finally, perform an across trials EDA: check if there is any major changes within traits across trials.
+This report presents a comprehensive exploratory data analysis of a soybean breeding program in **Zambia**, exploring **four trials** and **five key soybean traits**. The main objectives are to assess variation, detect unusual values, compute measures of central tendency and dispersion, and investigate relationships between traits.
 
-# Database selection - Zambia
+# Data characterization
+
+The dataset is composed of phenotypic records from a soybean breeding program conducted in Zambia during the 2023 growing season. A total of 29 genotypes were evaluated across four distinct locations (L0118, L0133, L074, and L0134), representing different environmental conditions. Each genotype was replicated three times per location, except for "G321", which had six replicates in each trial.
+
+Five agronomic traits were selected based on data availability and breeding importance: Days to Flowering (FLW_DAYS), Grain Yield (GY), Plant Height at R8 stage (PH_R8), Emergence Count (PL_EMERG_COUNT), and Pod Shattering.
 
 ```{r}
+#| label: trials-data
 
 # Loading packages
 library(ggplot2)
@@ -83,9 +88,10 @@ trial_4 <- selected_data |> filter(trial == "4")
 genotypes_4 <- trial_4$gen
 ```
 
-# Functions
+# Used Functions
 
 ```{r}
+#| label: functions
 
 # Function 1 - Single Trial Summary
 trial_summary <- function(df, title, traits, bins){
@@ -310,13 +316,11 @@ across_trials_correlation <- function(df, title, traits) {
 
 # Trials Overview
 
-Explicar genotipos do experimento, e cada trait analisado.
-
-Revisar tabela
+First, some basic statistics were computed for each trial, to facilitate comparison and evaluation of traits:
 
 ```{r}
-#| label: tabela-trait-local
-#| tbl-cap: "Measures of central tendency and dispersion of trials conducted in Zambia"
+#| label: stats-table1
+#| echo: false
 
 # Function 1 - Single Trials Summary
 all_trials_summary <- list()
@@ -329,18 +333,18 @@ for(i in seq_along(trials)){
 # Table 
 envs <- c("T1", "T2", "T3", "T4")
 traits <- c("FLW_DAYS", "GY", "PH_R8", "PL_EMERG_COUNT", "Pod_Shattering")
-df_empilhado <- map_df(seq_along(all_trials_summary), function(i) {
-  all_trials_summary[[i]]$stats |> 
-    mutate(Local = envs[i]) 
-})
 
-df_para_tabela <- df_empilhado |>
+df_conc <- map_df(seq_along(all_trials_summary), function(i) {
+  all_trials_summary[[i]]$stats |> 
+    mutate(Local = envs[i])})
+
+table_df <- df_conc |>
     pivot_longer(
     cols = c(mean, median, variance, sd, min, max, range), 
-    names_to = "Estatistica", 
-    values_to = "Valor"
+    names_to = "Stat", 
+    values_to = "Value"
   ) |>
-   mutate(Estatistica = case_match(Estatistica,
+   mutate(Stat = case_match(Stat,
     "mean" ~ "Mean",
     "median" ~ "Median",
     "variance" ~ "Variance",
@@ -349,30 +353,43 @@ df_para_tabela <- df_empilhado |>
     "max" ~ "Max",
     "range" ~ "Range"
   )) |> 
-  pivot_wider(names_from = c(Variable, Local), values_from = Valor)
+  pivot_wider(names_from = c(Variable, Local), values_from = Value)
 
 n_traits <- 5
-n_locais <- 4
+n_local <- 4
 
-cabecalho_superior <- c(" " = 1)
-cabecalho_superior[traits] <- n_locais 
+sup_header <- c(" " = 1)
+sup_header[traits] <- n_local 
 
-df_para_tabela |>
+order <- unlist(lapply(traits, function(trait) {
+  paste0(trait, "_", envs)}))
+
+table_df <- table_df |>
+  select(Stat, all_of(order))
+
+```
+
+```{r}
+#| label: tbl-stats-table2
+#| tbl-cap: "Measures of central tendency and dispersion of trials conducted in Zambia"
+#| echo: false
+table_df |>
   kable(
     digits = 2,
     align = "l",
-    col.names = c(" ", rep(envs, n_traits)), 
-    caption = "Measures of central tendency and dispersion of trials conducted in Zambia"
-  ) |>
+    col.names = c(" ", rep(envs, n_traits))) |>
   kable_styling(
     bootstrap_options = c("striped", "hover", "condensed"), 
     full_width = FALSE
   ) |>
-  add_header_above(cabecalho_superior) |>
+  add_header_above(sup_header) |>
   column_spec(1, bold = TRUE, border_right = TRUE)
 ```
 
+In @tbl-stats-table2 ... Outlier Trial 1 (PH_R8) -\> removing outlier observation:
+
 ```{r}
+#| label: outlier
 
 # Removing outlier
 trial_1 <- trial_1 |> 
@@ -389,171 +406,605 @@ for(i in seq_along(trials)){
 }
 ```
 
+Now, some plots analysing all the traits within each trial:
+
 ```{r}
+#| label: fig-all_trials_density
+#| fig.cap: "Density plot of traits within each trial"
+#| echo: false
+
 # Function 4 - Single Trials General Overview
 all_trials_together <- single_trials_together(selected_data, "All Trials Overview", traits)
-
 all_trials_together$density
+```
+
+```{r}
+#| label: fig-all_trials_boxplot
+#| fig.cap: "Boxplot of traits within each trial"
+#| echo: false
 all_trials_together$boxplot
+```
 
-# Function 5 - All Trials Boxplot By Genotype
-# Grain Yield
+Analysing the boxplot @fig-all_trials_boxplot aaa
+
+```{r}
+#| label: fig-gt_boxplot_gy
+#| fig.cap: "Genotypes Boxplot - Grain Yield"
+#| echo: false
+
+# Function 5 - Grain Yield
 all_genotype_GY <- boxplot_genotype_all_in_one(selected_data,"GY")
-all_genotype_GY$boxplot_gt_trial
 all_genotype_GY$boxplot_gt
+#all_genotype_GY$boxplot_gt_trial
+```
 
-# Plant Height
+```{r}
+#| label: fig-gt_boxplot_ph
+#| fig.cap: "Genotypes Boxplot - Plant Height"
+#| echo: false
+
+# Function 5 - Plant Height
 all_genotype_PH <- boxplot_genotype_all_in_one(selected_data,"PH_R8")
-all_genotype_PH$boxplot_gt_trial
 all_genotype_PH$boxplot_gt
+#all_genotype_PH$boxplot_gt_trial
+```
 
-# Pod_Shattering
+```{r}
+#| label: fig-gt_boxplot_ps
+#| fig.cap: "Genotypes Boxplot - Pod Shattering"
+#| echo: false
+
+# Function 5 - Pod_Shattering
 all_genotype_PS <- boxplot_genotype_all_in_one(selected_data,"Pod_Shattering")
-all_genotype_PS$boxplot_gt_trial
 all_genotype_PS$boxplot_gt
+#all_genotype_PS$boxplot_gt_trial
+```
 
-# Days to Flowering
+```{r}
+#| label: fig-gt_boxplot_fl
+#| fig.cap: "Genotypes Boxplot - Days to Flowering"
+#| echo: false
+
+# Function 5 - Days to Flowering
 all_genotype_FL <- boxplot_genotype_all_in_one(selected_data,"FLW_DAYS")
-all_genotype_FL$boxplot_gt_trial
 all_genotype_FL$boxplot_gt
+#all_genotype_FL$boxplot_gt_trial
+```
 
-# Plant Emergence
+```{r}
+#| label: fig-gt_boxplot_pl
+#| fig.cap: "Genotypes Boxplot - Plant Emergence"
+#| echo: false
+
+# Function 5 - Plant Emergence
 all_genotype_PL <- boxplot_genotype_all_in_one(selected_data,"PL_EMERG_COUNT")
-all_genotype_PL$boxplot_gt_trial
 all_genotype_PL$boxplot_gt
+#all_genotype_PL$boxplot_gt_trial
+```
+
+```{r}
+#| label: fig-across_corr
+#| fig.cap: "Traits Correlation Across Trials"
+#| echo: false 
 
 # Function 6 - Across Trials Correlation
 across_trials_corr <- across_trials_correlation(selected_data, "Across Trials Correlation", traits)
-across_trials_corr
+across_trials_corr 
 ```
 
 # Trial 1 - Local "L0118" / Year "2023"
 
 ```{r}
+#| label: fig-t1_corr
+#| fig.cap: "Trial 1 - Traits Correlation"
+#| echo: false 
 
 # Trial 1
-all_trials_summary[[1]]$stats
 all_trials_summary[[1]]$correlation
+```
+
+```{r}
+#| label: fig-t1_dens
+#| fig.cap: "Trial 1 - Traits Density Plot"
+#| echo: false 
+
+# Trial 1
 all_trials_summary[[1]]$density
+```
+
+```{r}
+#| label: fig-t1_box
+#| fig.cap: "Trial 1 - Traits Boxplot"
+#| echo: false 
+
+# Trial 1
 all_trials_summary[[1]]$boxplot
-all_trials_summary[[1]]$histogram
+```
 
+```{r}
+#| label: fig-t1_hist
+#| fig.cap: "Trial 1 - Traits Histogram"
+#| echo: false 
+
+# Trial 1
+all_trials_summary[[1]]$boxplot
+```
+
+```{r}
+#| label: fig-t1_scatter1
+#| fig.cap: "Trial 1 - Scatter Plots"
+#| echo: false 
 # Function 2 - Single Trial Pairwise Scatter Plot
-pairwise_scatter(trial_1,"Trial 1", "GY", "PH_R8", "GY (kg/ha)", "PH (cm)")
-pairwise_scatter(trial_1,"Trial 1", "GY", "FLW_DAYS", "GY (kg/ha)", "Days to Flowering")
-pairwise_scatter(trial_1,"Trial 1", "GY", "PL_EMERG_COUNT", "GY (kg/ha)", "Plant Emergence")
-pairwise_scatter(trial_1,"Trial 1", "GY", "Pod_Shattering", "GY (kg/ha)", "Pod_Shattering score")
-pairwise_scatter(trial_1,"Trial 1", "Pod_Shattering", "PH_R8", "Pod_Shattering score", "PH (cm)")
-pairwise_scatter(trial_1,"Trial 1", "Pod_Shattering", "FLW_DAYS", "Pod_Shattering score", "Days to Flowering")
-pairwise_scatter(trial_1,"Trial 1", "Pod_Shattering", "PL_EMERG_COUNT", "Pod_Shattering score", "Plant Emergence")
-pairwise_scatter(trial_1,"Trial 1", "PL_EMERG_COUNT", "PH_R8", "Plant Emergence", "PH (cm)")
-pairwise_scatter(trial_1,"Trial 1", "PL_EMERG_COUNT", "FLW_DAYS", "Plant Emergence", "Days to Flowering")
-pairwise_scatter(trial_1,"Trial 1", "FLW_DAYS", "PH_R8", "Days to Flowering", "PH (cm)")
+t1_p1 <-pairwise_scatter(trial_1,"Trial 1", "GY", "PH_R8", "GY (kg/ha)", "PH (cm)")
+t1_p2 <-pairwise_scatter(trial_1,"Trial 1", "GY", "FLW_DAYS", "GY (kg/ha)", "Days to Flowering")
+(t1_p1 | t1_p2)
+```
 
+```{r}
+#| label: fig-t1_scatter2
+#| fig.cap: "Trial 1 - Scatter Plots"
+#| echo: false 
+# Function 2 - Single Trial Pairwise Scatter Plot
+t1_p3 <- pairwise_scatter(trial_1,"Trial 1", "GY", "PL_EMERG_COUNT", "GY (kg/ha)", "Plant Emergence")
+t1_p4 <- pairwise_scatter(trial_1,"Trial 1", "GY", "Pod_Shattering", "GY (kg/ha)", "Pod_Shattering score")
+(t1_p3 | t1_p4)
+```
+
+```{r}
+#| label: fig-t1_scatter3
+#| fig.cap: "Trial 1 - Scatter Plots"
+#| echo: false 
+# Function 2 - Single Trial Pairwise Scatter Plot
+t1_p5 <- pairwise_scatter(trial_1,"Trial 1", "Pod_Shattering", "PH_R8", "Pod_Shattering score", "PH (cm)")
+t1_p6 <- pairwise_scatter(trial_1,"Trial 1", "Pod_Shattering", "FLW_DAYS", "Pod_Shattering score", "Days to Flowering")
+(t1_p5 | t1_p6)
+```
+
+```{r}
+#| label: fig-t1_scatter4
+#| fig.cap: "Trial 1 - Scatter Plots"
+#| echo: false 
+# Function 2 - Single Trial Pairwise Scatter Plot
+t1_p7 <- pairwise_scatter(trial_1,"Trial 1", "Pod_Shattering", "PL_EMERG_COUNT", "Pod_Shattering score", "Plant Emergence")
+t1_p8 <- pairwise_scatter(trial_1,"Trial 1", "PL_EMERG_COUNT", "PH_R8", "Plant Emergence", "PH (cm)")
+(t1_p7 | t1_p8)
+```
+
+```{r}
+#| label: fig-t1_scatter5
+#| fig.cap: "Trial 1 - Scatter Plots"
+#| echo: false 
+# Function 2 - Single Trial Pairwise Scatter Plot
+t1_p9 <- pairwise_scatter(trial_1,"Trial 1", "PL_EMERG_COUNT", "FLW_DAYS", "Plant Emergence", "Days to Flowering")
+t1_p10 <- pairwise_scatter(trial_1,"Trial 1", "FLW_DAYS", "PH_R8", "Days to Flowering", "PH (cm)")
+(t1_p9 | t1_p10)
+```
+
+```{r}
+#| label: fig-t1_box_gy
+#| fig.cap: "Trial 1 Genotypes Boxplot - Grain Yield"
+#| echo: false 
 # Function 3 - Single Trial Boxplot by Genotype
 boxplot_by_genotype(trial_1,"Trial 1", "GY", "GY (kg/ha)")
+```
+
+```{r}
+#| label: fig-t1_box_ph
+#| fig.cap: "Trial 1 Genotypes Boxplot - Plant Height"
+#| echo: false
+# Function 3 - Single Trial Boxplot by Genotype
 boxplot_by_genotype(trial_1,"Trial 1", "PH_R8", "PH (cm)")
+```
+
+```{r}
+#| label: fig-t1_box_fl
+#| fig.cap: "Trial 1 Genotypes Boxplot - Flowering Days"
+#| echo: false
+# Function 3 - Single Trial Boxplot by Genotype
 boxplot_by_genotype(trial_1,"Trial 1", "FLW_DAYS", "Days to Flowering")
+```
+
+```{r}
+#| label: fig-t1_box_ps
+#| fig.cap: "Trial 1 Genotypes Boxplot - Pod Shattering"
+#| echo: false
+# Function 3 - Single Trial Boxplot by Genotype
 boxplot_by_genotype(trial_1,"Trial 1", "Pod_Shattering", "Pod_Shattering score")
+```
+
+```{r}
+#| label: fig-t1_box_pl
+#| fig.cap: "Trial 1 Genotypes Boxplot - Plant Emergence"
+#| echo: false
+# Function 3 - Single Trial Boxplot by Genotype
 boxplot_by_genotype(trial_1,"Trial 1", "PL_EMERG_COUNT", "Plant Emergence")
 ```
 
 # Trial 2 - Local "L0133" / Year "2023"
 
 ```{r}
+#| label: fig-t2_corr
+#| fig.cap: "Trial 2 - Traits Correlation"
+#| echo: false 
 
 # Trial 2
-all_trials_summary[[2]]$stats
 all_trials_summary[[2]]$correlation
+```
+
+```{r}
+#| label: fig-t2_dens
+#| fig.cap: "Trial 2 - Traits Density Plot"
+#| echo: false 
+
+# Trial 2
 all_trials_summary[[2]]$density
+```
+
+```{r}
+#| label: fig-t2_box
+#| fig.cap: "Trial 2 - Traits Boxplot"
+#| echo: false 
+
+# Trial 2
 all_trials_summary[[2]]$boxplot
-all_trials_summary[[2]]$histogram
+```
 
+```{r}
+#| label: fig-t2_hist
+#| fig.cap: "Trial 2 - Traits Histogram"
+#| echo: false 
+
+# Trial 2
+all_trials_summary[[2]]$boxplot
+```
+
+```{r}
+#| label: fig-t2_scatter1
+#| fig.cap: "Trial 2 - Scatter Plots"
+#| echo: false 
 # Function 2 - Single Trial Pairwise Scatter Plot
-pairwise_scatter(trial_2,"Trial 2", "GY", "PH_R8", "GY (kg/ha)", "PH (cm)")
-pairwise_scatter(trial_2,"Trial 2", "GY", "FLW_DAYS", "GY (kg/ha)", "Days to Flowering")
-pairwise_scatter(trial_2,"Trial 2", "GY", "PL_EMERG_COUNT", "GY (kg/ha)", "Plant Emergence")
-pairwise_scatter(trial_2,"Trial 2", "GY", "Pod_Shattering", "GY (kg/ha)", "Pod_Shattering score")
-pairwise_scatter(trial_2,"Trial 2", "Pod_Shattering", "PH_R8", "Pod_Shattering score", "PH (cm)")
-pairwise_scatter(trial_2,"Trial 2", "Pod_Shattering", "FLW_DAYS", "Pod_Shattering score", "Days to Flowering")
-pairwise_scatter(trial_2,"Trial 2", "Pod_Shattering", "PL_EMERG_COUNT", "Pod_Shattering score", "Plant Emergence")
-pairwise_scatter(trial_2,"Trial 2", "PL_EMERG_COUNT", "PH_R8", "Plant Emergence", "PH (cm)")
-pairwise_scatter(trial_2,"Trial 2", "PL_EMERG_COUNT", "FLW_DAYS", "Plant Emergence", "Days to Flowering")
-pairwise_scatter(trial_2,"Trial 2", "FLW_DAYS", "PH_R8", "Days to Flowering", "PH (cm)")
+t2_p1 <-pairwise_scatter(trial_2,"Trial 2", "GY", "PH_R8", "GY (kg/ha)", "PH (cm)")
+t2_p2 <-pairwise_scatter(trial_2,"Trial 2", "GY", "FLW_DAYS", "GY (kg/ha)", "Days to Flowering")
+(t2_p1 | t2_p2)
+```
 
+```{r}
+#| label: fig-t2_scatter2
+#| fig.cap: "Trial 2 - Scatter Plots"
+#| echo: false 
+# Function 2 - Single Trial Pairwise Scatter Plot
+t2_p3 <- pairwise_scatter(trial_2,"Trial 2", "GY", "PL_EMERG_COUNT", "GY (kg/ha)", "Plant Emergence")
+t2_p4 <- pairwise_scatter(trial_2,"Trial 2", "GY", "Pod_Shattering", "GY (kg/ha)", "Pod_Shattering score")
+(t2_p3 | t2_p4)
+```
+
+```{r}
+#| label: fig-t2_scatter3
+#| fig.cap: "Trial 2 - Scatter Plots"
+#| echo: false 
+# Function 2 - Single Trial Pairwise Scatter Plot
+t2_p5 <- pairwise_scatter(trial_2,"Trial 2", "Pod_Shattering", "PH_R8", "Pod_Shattering score", "PH (cm)")
+t2_p6 <- pairwise_scatter(trial_2,"Trial 2", "Pod_Shattering", "FLW_DAYS", "Pod_Shattering score", "Days to Flowering")
+(t2_p5 | t2_p6)
+```
+
+```{r}
+#| label: fig-t2_scatter4
+#| fig.cap: "Trial 2 - Scatter Plots"
+#| echo: false 
+# Function 2 - Single Trial Pairwise Scatter Plot
+t2_p7 <- pairwise_scatter(trial_2,"Trial 2", "Pod_Shattering", "PL_EMERG_COUNT", "Pod_Shattering score", "Plant Emergence")
+t2_p8 <- pairwise_scatter(trial_2,"Trial 2", "PL_EMERG_COUNT", "PH_R8", "Plant Emergence", "PH (cm)")
+(t2_p7 | t2_p8)
+```
+
+```{r}
+#| label: fig-t2_scatter5
+#| fig.cap: "Trial 2 - Scatter Plots"
+#| echo: false 
+# Function 2 - Single Trial Pairwise Scatter Plot
+t2_p9 <- pairwise_scatter(trial_2,"Trial 2", "PL_EMERG_COUNT", "FLW_DAYS", "Plant Emergence", "Days to Flowering")
+t2_p10 <- pairwise_scatter(trial_2,"Trial 2", "FLW_DAYS", "PH_R8", "Days to Flowering", "PH (cm)")
+(t2_p9 | t2_p10)
+```
+
+```{r}
+#| label: fig-t2_box_gy
+#| fig.cap: "Trial 2 Genotypes Boxplot - Grain Yield"
+#| echo: false 
 # Function 3 - Single Trial Boxplot by Genotype
 boxplot_by_genotype(trial_2,"Trial 2", "GY", "GY (kg/ha)")
+```
+
+```{r}
+#| label: fig-t2_box_ph
+#| fig.cap: "Trial 2 Genotypes Boxplot - Plant Height"
+#| echo: false
+# Function 3 - Single Trial Boxplot by Genotype
 boxplot_by_genotype(trial_2,"Trial 2", "PH_R8", "PH (cm)")
+```
+
+```{r}
+#| label: fig-t2_box_fl
+#| fig.cap: "Trial 2 Genotypes Boxplot - Flowering Days"
+#| echo: false
+# Function 3 - Single Trial Boxplot by Genotype
 boxplot_by_genotype(trial_2,"Trial 2", "FLW_DAYS", "Days to Flowering")
+```
+
+```{r}
+#| label: fig-t2_box_ps
+#| fig.cap: "Trial 2 Genotypes Boxplot - Pod Shattering"
+#| echo: false
+# Function 3 - Single Trial Boxplot by Genotype
 boxplot_by_genotype(trial_2,"Trial 2", "Pod_Shattering", "Pod_Shattering score")
+```
+
+```{r}
+#| label: fig-t2_box_pl
+#| fig.cap: "Trial 2 Genotypes Boxplot - Plant Emergence"
+#| echo: false
+# Function 3 - Single Trial Boxplot by Genotype
 boxplot_by_genotype(trial_2,"Trial 2", "PL_EMERG_COUNT", "Plant Emergence")
 ```
 
 # Trial 3 - Local "L074" / Year "2023"
 
 ```{r}
+#| label: fig-t3_corr
+#| fig.cap: "Trial 3 - Traits Correlation"
+#| echo: false 
+
 # Trial 3
-all_trials_summary[[3]]$stats
 all_trials_summary[[3]]$correlation
+```
+
+```{r}
+#| label: fig-t3_dens
+#| fig.cap: "Trial 3 - Traits Density Plot"
+#| echo: false 
+
+# Trial 3
 all_trials_summary[[3]]$density
+```
+
+```{r}
+#| label: fig-t3_box
+#| fig.cap: "Trial 3 - Traits Boxplot"
+#| echo: false 
+
+# Trial 3
 all_trials_summary[[3]]$boxplot
-all_trials_summary[[3]]$histogram
+```
 
+```{r}
+#| label: fig-t3_hist
+#| fig.cap: "Trial 3 - Traits Histogram"
+#| echo: false 
+
+# Trial 3
+all_trials_summary[[3]]$boxplot
+```
+
+```{r}
+#| label: fig-t3_scatter1
+#| fig.cap: "Trial 3 - Scatter Plots"
+#| echo: false 
 # Function 2 - Single Trial Pairwise Scatter Plot
-pairwise_scatter(trial_3,"Trial 3", "GY", "PH_R8", "GY (kg/ha)", "PH (cm)")
-pairwise_scatter(trial_3,"Trial 3", "GY", "FLW_DAYS", "GY (kg/ha)", "Days to Flowering")
-pairwise_scatter(trial_3,"Trial 3", "GY", "PL_EMERG_COUNT", "GY (kg/ha)", "Plant Emergence")
-pairwise_scatter(trial_3,"Trial 3", "GY", "Pod_Shattering", "GY (kg/ha)", "Pod_Shattering score")
-pairwise_scatter(trial_3,"Trial 3", "Pod_Shattering", "PH_R8", "Pod_Shattering score", "PH (cm)")
-pairwise_scatter(trial_3,"Trial 3", "Pod_Shattering", "FLW_DAYS", "Pod_Shattering score", "Days to Flowering")
-pairwise_scatter(trial_3,"Trial 3", "Pod_Shattering", "PL_EMERG_COUNT", "Pod_Shattering score", "Plant Emergence")
-pairwise_scatter(trial_3,"Trial 3", "PL_EMERG_COUNT", "PH_R8", "Plant Emergence", "PH (cm)")
-pairwise_scatter(trial_3,"Trial 3", "PL_EMERG_COUNT", "FLW_DAYS", "Plant Emergence", "Days to Flowering")
-pairwise_scatter(trial_3,"Trial 3", "FLW_DAYS", "PH_R8", "Days to Flowering", "PH (cm)")
+t3_p1 <-pairwise_scatter(trial_3,"Trial 3", "GY", "PH_R8", "GY (kg/ha)", "PH (cm)")
+t3_p2 <-pairwise_scatter(trial_3,"Trial 3", "GY", "FLW_DAYS", "GY (kg/ha)", "Days to Flowering")
+(t3_p1 | t3_p2)
+```
 
+```{r}
+#| label: fig-t3_scatter2
+#| fig.cap: "Trial 3 - Scatter Plots"
+#| echo: false 
+# Function 2 - Single Trial Pairwise Scatter Plot
+t3_p3 <- pairwise_scatter(trial_3,"Trial 3", "GY", "PL_EMERG_COUNT", "GY (kg/ha)", "Plant Emergence")
+t3_p4 <- pairwise_scatter(trial_3,"Trial 3", "GY", "Pod_Shattering", "GY (kg/ha)", "Pod_Shattering score")
+(t3_p3 | t3_p4)
+```
+
+```{r}
+#| label: fig-t3_scatter3
+#| fig.cap: "Trial 3 - Scatter Plots"
+#| echo: false 
+# Function 2 - Single Trial Pairwise Scatter Plot
+t3_p5 <- pairwise_scatter(trial_3,"Trial 3", "Pod_Shattering", "PH_R8", "Pod_Shattering score", "PH (cm)")
+t3_p6 <- pairwise_scatter(trial_3,"Trial 3", "Pod_Shattering", "FLW_DAYS", "Pod_Shattering score", "Days to Flowering")
+(t3_p5 | t3_p6)
+```
+
+```{r}
+#| label: fig-t3_scatter4
+#| fig.cap: "Trial 3 - Scatter Plots"
+#| echo: false 
+# Function 2 - Single Trial Pairwise Scatter Plot
+t3_p7 <- pairwise_scatter(trial_3,"Trial 3", "Pod_Shattering", "PL_EMERG_COUNT", "Pod_Shattering score", "Plant Emergence")
+t3_p8 <- pairwise_scatter(trial_3,"Trial 3", "PL_EMERG_COUNT", "PH_R8", "Plant Emergence", "PH (cm)")
+(t3_p7 | t3_p8)
+```
+
+```{r}
+#| label: fig-t3_scatter5
+#| fig.cap: "Trial 3 - Scatter Plots"
+#| echo: false 
+# Function 2 - Single Trial Pairwise Scatter Plot
+t3_p9 <- pairwise_scatter(trial_3,"Trial 3", "PL_EMERG_COUNT", "FLW_DAYS", "Plant Emergence", "Days to Flowering")
+t3_p10 <- pairwise_scatter(trial_3,"Trial 3", "FLW_DAYS", "PH_R8", "Days to Flowering", "PH (cm)")
+(t3_p9 | t3_p10)
+```
+
+```{r}
+#| label: fig-t3_box_gy
+#| fig.cap: "Trial 3 Genotypes Boxplot - Grain Yield"
+#| echo: false 
 # Function 3 - Single Trial Boxplot by Genotype
 boxplot_by_genotype(trial_3,"Trial 3", "GY", "GY (kg/ha)")
+```
+
+```{r}
+#| label: fig-t3_box_ph
+#| fig.cap: "Trial 3 Genotypes Boxplot - Plant Height"
+#| echo: false
+# Function 3 - Single Trial Boxplot by Genotype
 boxplot_by_genotype(trial_3,"Trial 3", "PH_R8", "PH (cm)")
+```
+
+```{r}
+#| label: fig-t3_box_fl
+#| fig.cap: "Trial 3 Genotypes Boxplot - Flowering Days"
+#| echo: false
+# Function 3 - Single Trial Boxplot by Genotype
 boxplot_by_genotype(trial_3,"Trial 3", "FLW_DAYS", "Days to Flowering")
+```
+
+```{r}
+#| label: fig-t3_box_ps
+#| fig.cap: "Trial 3 Genotypes Boxplot - Pod Shattering"
+#| echo: false
+# Function 3 - Single Trial Boxplot by Genotype
 boxplot_by_genotype(trial_3,"Trial 3", "Pod_Shattering", "Pod_Shattering score")
+```
+
+```{r}
+#| label: fig-t3_box_pl
+#| fig.cap: "Trial 3 Genotypes Boxplot - Plant Emergence"
+#| echo: false
+# Function 3 - Single Trial Boxplot by Genotype
 boxplot_by_genotype(trial_3,"Trial 3", "PL_EMERG_COUNT", "Plant Emergence")
 ```
 
 # Trial 4 - Local "L0134" / Year "2023"
 
 ```{r}
+#| label: fig-t4_corr
+#| fig.cap: "Trial 4 - Traits Correlation"
+#| echo: false 
+
 # Trial 4
-all_trials_summary[[4]]$stats
 all_trials_summary[[4]]$correlation
+```
+
+```{r}
+#| label: fig-t4_dens
+#| fig.cap: "Trial 4 - Traits Density Plot"
+#| echo: false 
+
+# Trial 4
 all_trials_summary[[4]]$density
+```
+
+```{r}
+#| label: fig-t4_box
+#| fig.cap: "Trial 4 - Traits Boxplot"
+#| echo: false 
+
+# Trial 4
 all_trials_summary[[4]]$boxplot
-all_trials_summary[[4]]$histogram
+```
 
+```{r}
+#| label: fig-t4_hist
+#| fig.cap: "Trial 4 - Traits Histogram"
+#| echo: false 
+
+# Trial 4
+all_trials_summary[[4]]$boxplot
+```
+
+```{r}
+#| label: fig-t4_scatter1
+#| fig.cap: "Trial 4 - Scatter Plots"
+#| echo: false 
 # Function 2 - Single Trial Pairwise Scatter Plot
-pairwise_scatter(trial_4,"Trial 4", "GY", "PH_R8", "GY (kg/ha)", "PH (cm)")
-pairwise_scatter(trial_4,"Trial 4", "GY", "FLW_DAYS", "GY (kg/ha)", "Days to Flowering")
-pairwise_scatter(trial_4,"Trial 4", "GY", "PL_EMERG_COUNT", "GY (kg/ha)", "Plant Emergence")
-pairwise_scatter(trial_4,"Trial 4", "GY", "Pod_Shattering", "GY (kg/ha)", "Pod_Shattering score")
-pairwise_scatter(trial_4,"Trial 4", "Pod_Shattering", "PH_R8", "Pod_Shattering score", "PH (cm)")
-pairwise_scatter(trial_4,"Trial 4", "Pod_Shattering", "FLW_DAYS", "Pod_Shattering score", "Days to Flowering")
-pairwise_scatter(trial_4,"Trial 4", "Pod_Shattering", "PL_EMERG_COUNT", "Pod_Shattering score", "Plant Emergence")
-pairwise_scatter(trial_4,"Trial 4", "PL_EMERG_COUNT", "PH_R8", "Plant Emergence", "PH (cm)")
-pairwise_scatter(trial_4,"Trial 4", "PL_EMERG_COUNT", "FLW_DAYS", "Plant Emergence", "Days to Flowering")
-pairwise_scatter(trial_4,"Trial 4", "FLW_DAYS", "PH_R8", "Days to Flowering", "PH (cm)")
+t4_p1 <-pairwise_scatter(trial_4,"Trial 4", "GY", "PH_R8", "GY (kg/ha)", "PH (cm)")
+t4_p2 <-pairwise_scatter(trial_4,"Trial 4", "GY", "FLW_DAYS", "GY (kg/ha)", "Days to Flowering")
+(t4_p1 | t4_p2)
+```
 
+```{r}
+#| label: fig-t4_scatter2
+#| fig.cap: "Trial 4 - Scatter Plots"
+#| echo: false 
+# Function 2 - Single Trial Pairwise Scatter Plot
+t4_p3 <- pairwise_scatter(trial_4,"Trial 4", "GY", "PL_EMERG_COUNT", "GY (kg/ha)", "Plant Emergence")
+t4_p4 <- pairwise_scatter(trial_4,"Trial 4", "GY", "Pod_Shattering", "GY (kg/ha)", "Pod_Shattering score")
+(t4_p3 | t4_p4)
+```
+
+```{r}
+#| label: fig-t4_scatter3
+#| fig.cap: "Trial 4 - Scatter Plots"
+#| echo: false 
+# Function 2 - Single Trial Pairwise Scatter Plot
+t4_p5 <- pairwise_scatter(trial_4,"Trial 4", "Pod_Shattering", "PH_R8", "Pod_Shattering score", "PH (cm)")
+t4_p6 <- pairwise_scatter(trial_4,"Trial 4", "Pod_Shattering", "FLW_DAYS", "Pod_Shattering score", "Days to Flowering")
+(t4_p5 | t4_p6)
+```
+
+```{r}
+#| label: fig-t4_scatter4
+#| fig.cap: "Trial 4 - Scatter Plots"
+#| echo: false 
+# Function 2 - Single Trial Pairwise Scatter Plot
+t4_p7 <- pairwise_scatter(trial_4,"Trial 4", "Pod_Shattering", "PL_EMERG_COUNT", "Pod_Shattering score", "Plant Emergence")
+t4_p8 <- pairwise_scatter(trial_4,"Trial 4", "PL_EMERG_COUNT", "PH_R8", "Plant Emergence", "PH (cm)")
+(t4_p7 | t4_p8)
+```
+
+```{r}
+#| label: fig-t4_scatter5
+#| fig.cap: "Trial 4 - Scatter Plots"
+#| echo: false 
+# Function 2 - Single Trial Pairwise Scatter Plot
+t4_p9 <- pairwise_scatter(trial_4,"Trial 4", "PL_EMERG_COUNT", "FLW_DAYS", "Plant Emergence", "Days to Flowering")
+t4_p10 <- pairwise_scatter(trial_4,"Trial 4", "FLW_DAYS", "PH_R8", "Days to Flowering", "PH (cm)")
+(t4_p9 | t4_p10)
+```
+
+```{r}
+#| label: fig-t4_box_gy
+#| fig.cap: "Trial 4 Genotypes Boxplot - Grain Yield"
+#| echo: false 
 # Function 3 - Single Trial Boxplot by Genotype
 boxplot_by_genotype(trial_4,"Trial 4", "GY", "GY (kg/ha)")
+```
+
+```{r}
+#| label: fig-t4_box_ph
+#| fig.cap: "Trial 4 Genotypes Boxplot - Plant Height"
+#| echo: false
+# Function 3 - Single Trial Boxplot by Genotype
 boxplot_by_genotype(trial_4,"Trial 4", "PH_R8", "PH (cm)")
+```
+
+```{r}
+#| label: fig-t4_box_fl
+#| fig.cap: "Trial 4 Genotypes Boxplot - Flowering Days"
+#| echo: false
+# Function 3 - Single Trial Boxplot by Genotype
 boxplot_by_genotype(trial_4,"Trial 4", "FLW_DAYS", "Days to Flowering")
+```
+
+```{r}
+#| label: fig-t4_box_ps
+#| fig.cap: "Trial 4 Genotypes Boxplot - Pod Shattering"
+#| echo: false
+# Function 3 - Single Trial Boxplot by Genotype
 boxplot_by_genotype(trial_4,"Trial 4", "Pod_Shattering", "Pod_Shattering score")
+```
+
+```{r}
+#| label: fig-t4_box_pl
+#| fig.cap: "Trial 4 Genotypes Boxplot - Plant Emergence"
+#| echo: false
+# Function 3 - Single Trial Boxplot by Genotype
 boxplot_by_genotype(trial_4,"Trial 4", "PL_EMERG_COUNT", "Plant Emergence")
 ```
 
 ## A FAZER
-
-1\) Listar os genotipos do experimento, e explicar cada trait analisado.
-
-2\) Revisar tabela
 
 3\) Definir critério de avaliação para os outliers (Trial 1 tem 1 outlier na altura)
 
