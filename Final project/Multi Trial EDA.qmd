@@ -34,7 +34,7 @@ knitr::opts_chunk$set(
 
 # Introduction
 
-This report presents a comprehensive exploratory data analysis of a soybean breeding program in **Zambia**, exploring **four trials** and **five key soybean traits**. The main objectives are to assess variation, detect unusual values, compute measures of central tendency and dispersion, and investigate relationships between traits.
+This report presents a comprehensive exploratory data analysis of a soybean breeding program in **Zambia**, exploring **four trials** and **five key soybean traits**. The main objectives are to assess variation, detect unusual values, compute measures of central tendency and dispersion, and investigate relationships between traits. First, we describe the custom functions developed to perform the EDA. In the following section, we present our insights regarding the experimental database. Finally, we analyze the performance of a trait to support genotype selection across the evaluated trials.
 
 # Data characterization
 
