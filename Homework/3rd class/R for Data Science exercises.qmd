@@ -1,23 +1,29 @@
 ---
-title: "R for Data Science exercises"
-subtitle: "Atividade semanal - Statistical Inference I"
-author: 
-  - name: Bruna Marques Moreno
-    affiliations:
-      - name: "Escola Superior de Agricultura 'Luiz de Queiroz' (ESALQ/USP)"
-        department: "Departamento de Genética"
+title: |
+  | R for Data Science exercises
+subtitle: "LGN 5822 - Statistical Genetics I: Foundations"
+author:
+  - "Bruna Marques Moreno"
+institute: |
+  | University of Sao Paulo
+  | "Luiz de Quieroz" College of Agriculture
+  | Departament of Genetics
+  | Graduate Program in Genetics and Plant Breeding
 format:
-  pdf:
-    number-sections: true
-    colorlinks: true
-    papersize: a4
-    geometry:
-      - top=30mm
-      - left=30mm
-      - right=20mm
-      - bottom=20mm
-    code-fold: show
-    theme: cosmo  
+  html:
+    theme: readable
+    highlight: tango
+    number_sections: true
+    toc: true
+    toc_float:
+      collapsed: true
+      smooth_scroll: true
+    fig_width: 8
+    fig_height: 8
+    fig_retina: 2
+    fig_caption: true
+    df_print: kable
+    embed-resources: true
 ---
 
 ## Introduction
@@ -31,12 +37,13 @@ Read Chapter 10 of R for Data Science and solve all exercises. Build a report us
 ```{r}
 #| warning: false
 library(tidyverse)
+library(ggplot2)
 data("diamonds")
 head(diamonds)
 str(diamonds)
 ```
 
-#### Analyzing X 
+Analyzing X 
 
 ```{r}
 summary(diamonds$x)
@@ -53,7 +60,7 @@ diamonds |>
   arrange(y)
 ```
 
-#### Analyzing y
+Analyzing y
 
 ```{r}
 summary(diamonds$y)
@@ -77,7 +84,7 @@ diamonds |>
 
 ```
 
-The y measurament is different. Analyzing what seems to be outliers (values under 3 and above 11), the values looks like they are miswritten values. There is no reason to have a large height and a lower value of carat. 
+The y measurament is different. Analyzing what seems to be outliers (values under 3 and above 11). These values seems to be miswritten. There is no logical reason to have one dimension that is not proportional to the others and have a lower value of carat. 
 
 I believe that x is the width, y is height and z is depth because the values of x and y follow a same pattern of size. I think that what is significantly different is the depth (the radius, depending on the cut) of the diamond. 
 
@@ -227,6 +234,7 @@ ggplot(diamonds, aes(x = carat, y = price, fill = cut))+
   geom_boxplot()+
   coord_flip()
 ```
+
 Adding coord_flip() produces the same effect as swapping the x and y variables. However, the visual result differs. The coord_flip() function is particularly helpful when dealing with long variable names, as it improves readability.
 
 ### One problem with boxplots is that they were developed in an era of much smaller datasets and tend to display a prohibitively large number of “outlying values”. One approach to remedy this problem is the letter value plot. Install the lvplot package, and try using geom_lv() to display the distribution of price vs. cut. What do you learn? How do you interpret the plots?
@@ -235,7 +243,7 @@ Adding coord_flip() produces the same effect as swapping the x and y variables. 
 #| warning: false
 #install.packages("lvplot")
 library(lvplot)
-?geom_lv
+#?geom_lv
 ggplot(data = diamonds, aes(x = cut, y = price, fill = cut))+
 geom_lv()
 ```
@@ -265,7 +273,7 @@ The graphs were created using the variables price and cut. In all of them, it is
 #| warning: false
 #install.packages("ggbeeswarm")
 library(ggbeeswarm)
-?ggbeeswarm
+#?ggbeeswarm
 
 ggplot(data = diamonds, aes(x = cut, y = price, fill = cut))+
   geom_jitter()
@@ -283,13 +291,13 @@ The section help displays this explanation for the package:
 >This package allows plotting of several groups of one dimensional data as a violin point/beeswarm plot in ggplot2 by arranging data points to resemble the underlying distribution.
 
 ```{r}
-?geom_beeswarm
+#?geom_beeswarm
 ```
 The ggbeeswarm package features the geom_beeswarm() function, which prevents points from overlapping by spreading them horizontally. It can be configured into square, hexagonal, or centered shapes. It is best suited for smaller datasets, where individual data points and their distribution remain clearly visible. It differs from geom_jitter() because it prevents points from overlapping, thereby improving the visualization of the data's density.
 
 ## Exercises 10.5.2.1
 
-### How could you rescale the count dataset above to more clearly show the distribution of cut within color, or color within cut? NÃO SEI, VER DEPOIS!!
+### How could you rescale the count dataset above to more clearly show the distribution of cut within color, or color within cut? 
 
 ```{r}
 ggplot(diamonds, aes(x = cut, y = color)) +
@@ -300,33 +308,102 @@ diamonds |>
   ggplot(aes(x = color, y = cut)) +
   geom_tile(aes(fill = n))
 
-diamonds |> 
+rescale_color <- diamonds |> 
   count(color, cut) |>
-  mutate(rescale_color = color/100)
+  mutate(rescale_color = log(n)) 
+
+  ggplot(rescale_color, aes(x = color, y = cut)) +
+  geom_count()
 ```
+I decided to transform the data using a logarithmic transformation. Given the large range of values, this approach helps linearize the data, revealing a more linear structure. As shown in the image above, this transformation has altered the distribution, and the values now appear very similar.
 
 ### What different data insights do you get with a segmented bar chart if color is mapped to the x aesthetic and cut is mapped to the fill aesthetic? Calculate the counts that fall into each of the segments.
 
 ```{r}
-flights <- nycflights13::flights 
+ggplot(diamonds, aes(x = color, fill = cut)) +
+  geom_bar()
+
+percentage <- diamonds |> 
+  count(color, cut) |>  
+  group_by(color) |>    
+  mutate(
+    "percentage (%)" = n / sum(n) * 100) |> 
+  ungroup(); percentage
 ```
+This configuration of the bar chart graph shows the proportion of each cut for each color. This is an interesting way to show three different information in one graph. Even though it is not represented in percentage, we are able to visualize the different proportions.
+
 
 ### Use geom_tile() together with dplyr to explore how average flight departure delays vary by destination and month of year. What makes the plot difficult to read? How could you improve it?
 
 ```{r}
+library(dplyr)
+library(ggplot2)
+head(nycflights13::flights)
+dep_delay <- nycflights13::flights[c(1:3, 6, 14)]
+summary(dep_delay)
 
+sum(is.na(dep_delay)) #too many NAs
+
+dep_delay |> 
+  group_by(year, dest) |>
+  summarize(mean_dest = mean(dep_delay, na.rm = TRUE)) |>
+  arrange(mean_dest)
+
+dep_delay |> 
+  group_by(month, dest) |>
+  summarize(mean_dest = mean(dep_delay, na.rm = TRUE)) |>
+  arrange(mean_dest) |>
+  ggplot(aes(x = dest, y = mean_dest, fill = mean_dest)) + 
+  geom_tile()
+
+summary(dep_delay)
 ```
+
+This data base is extensive, it has 105 rows when filter to destination. Therefore, the graph becomes crowded, it is not possible to observe each data point. One improvement could be a segmentation of the data such as a group of states/airports or types of delay. Also there is a lot of missing data (NA).    
 
 ## Exercises 10.5.3.1
 
 ### Instead of summarizing the conditional distribution with a boxplot, you could use a frequency polygon. What do you need to consider when using cut_width() vs. cut_number()? How does that impact a visualization of the 2d distribution of carat and price?
 
+The significant difference is the category of the groups formed. The function `cut_number()` cuts the data following a specific number of observations a determined sample size. Likewise, the function `cut_width()` cuts the database into bins with a determined width. This creates a faux categorical variable from a continuous dataset.
+
+```{r}
+#cut_width
+ggplot(diamonds, aes(x = carat, y = price)) + 
+  geom_boxplot(aes(group = cut_width(carat, 0.25)))
+
+#Cut_number
+ggplot(diamonds, aes(x = carat, y = price)) + 
+  geom_boxplot(aes(group = cut_number(diamonds$carat, n =5)))
+```
+
+The usage of each of them reveals a different aspect of the data. The function `cut_width()` allows you to create bins with a specific width, without worrying about the number of observations in each bin. On the other hand, the function `cut_number()` works by setting groups with the same number of observations, even though the widths are different.
+
 ### Visualize the distribution of carat, partitioned by price.
+
+```{r}
+#cut_width
+ggplot(diamonds, aes(x = price, y =carat )) + 
+  geom_boxplot(aes(group = cut_width(price, 1575)))
+
+#Cut_number
+ggplot(diamonds, aes(x = price, y =carat )) + 
+  geom_boxplot(aes(group = cut_number(diamonds$price, n =15)))
+```
 
 
 ### How does the price distribution of very large diamonds compare to small diamonds? Is it as you expect, or does it surprise you?
 
+The database shows that the higher the price, the larger the carat. I suspected this behavior was true because diamonds are very difficult to find; therefore, since larger diamonds are harder to find, they are worth more. What surprised me is that the cut also influences the price. Better cuts can cost less than lower-quality cuts if the latter have a larger carat weight.
+
 ### Combine two of the techniques you’ve learned to visualize the combined distribution of cut, carat, and price.
+
+```{r}
+ggplot(diamonds, aes(x = price, fill = cut)) + 
+  geom_histogram() +
+  facet_wrap(~cut)
+```
+
 
 ### Two dimensional plots reveal outliers that are not visible in one dimensional plots. For example, some points in the following plot have an unusual combination of x and y values, which makes the points outliers even though their x and y values appear normal when examined separately. Why is a scatterplot a better display than a binned plot for this case?
 
@@ -337,6 +414,7 @@ diamonds |>
   geom_point() +
   coord_cartesian(xlim = c(4, 11), ylim = c(4, 11))
 ```
+Scatterplots mix these two dimensions. If a value is not anomalous, it is supposed to be close to the central line, which represents a common linear relationship. Binned analysis would mask this value depending on the size of the bin. If the width were large enough to contain these points (for example, using `cut_width()`), they would not appear. In another possible scenario, a database where the number of observations inside each bin is high could contain those putative outliers, masking them from the analysis.
 
 ### Instead of creating boxes of equal width with `cut_width()`, we could create boxes that contain roughly equal number of points with `cut_number()`. What are the advantages and disadvantages of this approach?
 
@@ -344,4 +422,7 @@ diamonds |>
 ggplot(diamonds, aes(x = carat, y = price)) + 
   geom_boxplot(aes(group = cut_number(carat, 20)))
 ```
+Using the function `cut_number()` can be advantageous when the data being analyzed has large gaps between values. Since each bin must contain a specific number of observations, these gaps can be easily overlooked. However, when there is a high frequency of identical or very similar values across different objects, this approach may create too many bins containing the same values, which is not informative.
 
+
+The advantages of the `cut_width()` function are exactly the opposite of the disadvantages of `cut_number()`. Large datasets with many repeated values for different observations can be clustered into a single bin by adjusting its width. The major disadvantage of using this function is the masking of outliers. If the bin width is sufficiently large while the data is sparse, outliers may be merged into the bin and treated as normal data.

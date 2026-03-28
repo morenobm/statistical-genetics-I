@@ -9,8 +9,8 @@ institute: |
   | "Luiz de Quieroz" College of Agriculture
   | Departament of Genetics
   | Graduate Program in Genetics and Plant Breeding
-output:
-  html_document:
+format:
+  html:
     theme: readable
     highlight: tango
     toc: true
@@ -25,6 +25,7 @@ output:
     fig_caption: true
     df_print: kable
     keep_md: true
+    embed-resources: true
 ---
 
 ## Activity of the week (3^rd^ class)
