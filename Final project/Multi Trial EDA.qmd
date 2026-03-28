@@ -1071,3 +1071,7 @@ boxplot_by_genotype(trial_4,"Trial 4", "PL_EMERG_COUNT", "Plant Emergence")
 ```
 
 # Conclusion
+In conclusion, a cross-environmental analysis of Grain Yield (GY) highlights contrasting strategies among the evaluated materials. Genotypes G057 and G137 demonstrated remarkable performance, maintaining a positive standout status in three out of the four evaluated trials. This consistency suggests high yield stability and a robust genetic potential that is less sensitive to environmental fluctuations across different locations in Zambia.
+
+In contrast, genotype G146 exhibited high environmental sensitivity (Genotype x Environment Interaction). While it maintained average performance in two locations, it showed significant negative highlights for GY in the remaining two trials. These results indicate that while G057 and G137 are strong candidates for broad adaptation, G146's productivity is highly dependent on specific local conditions, making it a riskier choice for environments with high unpredictability.
+
