@@ -1,0 +1,199 @@
+---
+title: |
+  | Segregation test in maize RIL population
+subtitle: "LGN 5822 - Statistical Genetics I: Foundations"
+author:
+  - "Bruna Marques Moreno"
+institute: |
+  | University of Sao Paulo
+  | "Luiz de Quieroz" College of Agriculture
+  | Departament of Genetics
+  | Graduate Program in Genetics and Plant Breeding
+format:
+  html:
+    theme: readable
+    highlight: tango
+    number_sections: true
+    toc: true
+    toc_float:
+      collapsed: true
+      smooth_scroll: true
+    fig_width: 8
+    fig_height: 8
+    fig_retina: 2
+    fig_caption: true
+    df_print: kable
+    embed-resources: true
+---
+
+
+# Exercise
+
+Using the provided dataset, describe the hypothesis test and perform the segregation tests in each marker.  Using five randomly picked markers, plot the theoretical distribution and the corresponding significance level and p-value.
+
+```{r}
+data <- read.csv("~/Doutorado/Disciplinas/LGN5822 - Genética-estatística I fundamentos/statistical-genetics-I/Homework/4th class/Z009.csv")
+```
+## Hypothesis
+
+Observing the data structure and knowing that the dataset is derived from a Recombinant Inbred Line (RIL) population of maize, it is expected that at least 96% of the loci in each individual will show homozygosity, showing allele fixation for one of the alleles (0 or 2). Therefore, it can be stated:
+
+
+$H_0:$ there are no heterozygous individuals $(f(1) = 0)$
+
+
+$H_a:$ there is at least one heterozygous individual $(f(1) \neq 0)$
+
+The $H_a$ is considering that is complex to determine whether the heterogosity of a marker is either a sequencing mistake or a real heterozygous individual. It is very common to the sequencing technologies to have a error rate, which can not be easily detected.
+
+## Segregation test
+
+The segregation test in this case would be a chi-squared test ($\chi^2$), beacause we are testing if the group of markers is following a determined distribution. Then, our hypothesis will be:
+
+$H_0:$ The marker follows a distribution 1:1 (that is, the individuals are either 0 or 2)
+
+
+$H_a:$ The marker does not follow a distribution 1:1 (that is, the individuals can be 0, 1 or 2)
+
+```{r}
+markers <- data[, 2:1107] 
+p_values <- numeric(ncol(markers))
+names(p_values) <- colnames(markers)
+
+for (j in 1:ncol(markers)) {
+  col_data <- markers[[j]]
+  
+  n0 <- sum(col_data == 0, na.rm = TRUE)
+  n2 <- sum(col_data == 2, na.rm = TRUE)
+  obs <- c(n0, n2)
+  
+  if (sum(obs) > 0 && length(obs) == 2) {
+    segreg <- chisq.test(obs, p = c(0.5, 0.5), correct = FALSE)
+    p_values[j] <- segreg$p.value
+  } else {
+    p_values[j] <- NA
+  }
+}
+
+p_ad_bon <- p.adjust(p_values, method = "bonferroni")
+p_ad_fdr <- p.adjust(p_values, method = "BH")
+
+#output
+head(p_values)
+head(p_ad_bon)
+head(p_ad_fdr)
+
+flw_11 <- sum(p_ad_bon >= 0.05); flw_11
+dont_flw_11 <- sum(p_ad_bon <0.05); dont_flw_11
+
+flw_11_fdr <- sum(p_ad_fdr >= 0.05); flw_11_fdr
+dont_flw_11_fdr <- sum(p_ad_fdr <0.05); dont_flw_11_fdr
+
+#Selecting 5 random markers
+marker <- data[,c(9,23,30,93,96)] 
+```
+Only 31 of 1107 markers do not follow the expected segregation in a RIL population.
+
+## Testing each marker
+
+One important point to highlight for the graphs is the area in [green]{style="color: green;"} represents the **$H_0$ rejection area**. Once the $\chi^2_{calc}$ value is above the $\chi^2_{tab}$ value, the $H_0$ hypothesis is rejected.
+
+
+### General loop
+
+```{r}
+#| warning: false
+library(ggplot2)
+library(dplyr)
+markers <- data[,c(9,23,30,93,96)]
+n_cols <- ncol(markers)
+graphs <- list()
+m <- list()
+mrk_ <- list()
+mkrs_ <- list()
+chi_ <- list()
+x_calc_ <- numeric(n_cols)
+p_val_ <- numeric(n_cols)
+
+x_tab <- qchisq(0.95, df = 1)
+
+for (i in 1:n_cols){
+  m[[i]] <- markers[[i]]
+  mrk_[[i]] <- table(m[[i]])
+  
+  zero <- mrk_[[i]][1]
+  two <- mrk_[[i]][3]
+  
+  mkrs_[[i]] <- c(zero, two)
+
+  chi_[[i]] <- chisq.test(mkrs_[[i]], p = c(0.5, 0.5), correct = FALSE)
+  x_calc_[i] <- chi_[[i]]$statistic 
+  p_val_[i] <- chi_[[i]]$p.value
+
+  graphs[[i]]<- ggplot(data.frame(x = c(0.1, 6)), aes(x = x)) +
+    stat_function(fun = dchisq, args = list(df = 1), linewidth = 1) + #Chi-squared distribution
+    geom_vline(xintercept = x_calc_[i], color = "red", linetype = "dashed") + #chi calculated
+    geom_vline(xintercept = x_tab, color = "green", linetype = "dashed") +
+    stat_function(fun = dchisq, args = list(df = 1), xlim = c(x_calc_[i], 6), geom = "area", fill = "red", alpha = 0.2) + #area of the p-value
+    stat_function(fun = dchisq, args = list(df = 1), xlim = c(x_tab, 6), geom = "area", fill = "green", alpha = 0.2) +
+annotate("text", 
+           x = 4.5, 
+           y = 0.22, 
+           label = paste("p-value =", round(p_val_[i], 5)), 
+           color = "red", 
+           hjust = 0, 
+           fontface = "bold") +
+  annotate("text", x = x_tab + 1, y = 0.6, label = "X² tab", color = "green", vjust = -1) +
+  annotate("text", x = x_calc_[[i]]+0.05, y = 0.7, label = "X² calc", color = "red", vjust = -1) +
+  labs(title = paste("Marker", i),
+       x = "X² distribution", 
+       y = "Density") +
+  theme_minimal()
+}
+
+
+```
+
+```{r}
+visu_graph <- function(marker){
+  graph <- graphs[[marker]]
+  
+  
+  return(graph)
+}
+```
+
+#### Marker 1
+```{r}
+visu_graph(1)
+m1 <- data[,9]
+table(m1)
+```
+
+#### Marker 2
+```{r}
+visu_graph(2)
+m2 <- data[,23]
+table(m2)
+```
+
+#### Marker 3
+```{r}
+visu_graph(3)
+m3 <- data[,30]
+table(m3)
+```
+
+#### Marker 4
+```{r}
+visu_graph(4)
+m4 <- data[,93]
+table(m4)
+```
+
+#### Marker 5
+```{r}
+visu_graph(5)
+m5 <- data[,96]
+table(m5)
+```
