@@ -1,0 +1,496 @@
+---
+title: "Regression"
+author: 
+  - name: Bruna Moreno, Daniele Bononi, João Vitor Calvo, Renan Fantine
+    affiliation:
+      - name: Department of Genetics, ESALQ-USP
+        city: Piracicaba, São Paulo, Brazil
+format: 
+  html:
+    toc: true
+    toc-location: left
+    code-overflow: wrap
+    code-fold: true
+    fig-align: center
+    fig-width: 10
+    theme: 
+      light: journal
+      dark: darkly
+    embed-resources: true
+
+crossref: {}
+---
+
+```{r}
+#| label: setup
+#| include: false
+
+knitr::opts_chunk$set(
+  fig.show = "hold",
+  warning = FALSE,
+  message = FALSE,
+  results = "hold")
+```
+
+
+```{r}
+#| label: trials-data
+
+# Loading packages
+library(ggplot2)
+library(patchwork)
+library(tidyr)
+library(dplyr)
+library(purrr)
+library(knitr)
+library(kableExtra)
+library(grid)
+library(ggcorrplot)
+library(car)
+
+# Loading data (Zambia)
+data = read.csv("https://raw.githubusercontent.com/mauricioaraujj/Pan_African_Trials_Network/refs/heads/main/data/data.csv", sep = ';') |> filter(COUNTRY == "Zambia") 
+
+# Selecting traits
+traits <- c("FLW_DAYS", "GY", "PH_R8", "PL_EMERG_COUNT", "Pod_Shattering")
+selected_data <- data |> 
+  select(COUNTRY, YEAR, env, gen, loc, SEASON, rep, check, all_of(traits)) |> 
+  filter(loc %in% c("L0118", "L0133", "L074", "L0134") & YEAR == "2023") |> 
+  mutate(trial = case_when(
+    loc == "L0118" & YEAR == "2023" ~ 1,
+    loc == "L0133" & YEAR == "2023" ~ 2,
+    loc == "L074"  & YEAR == "2023" ~ 3,
+    loc == "L0134" & YEAR == "2023" ~ 4)) |> 
+  mutate(trial = as.factor(trial))
+```
+
+
+# Multiple Regression
+
+Now, a multiple regression model with the 3 independent variables will be considered: $y_i =\beta_0 + \beta_1x_{i1} + \beta_2x_{i2} + \beta_3x_{i3} + \varepsilon_{i}$:
+
+```{=latex}
+\begin{equation*}
+\begin{bmatrix}
+y_{1} \\
+y_{2} \\
+y_{3} \\
+\vdots \\
+y_{354} \\
+\end{bmatrix}
+=
+\begin{bmatrix}
+1 & x_{1\mathbf{1}} & x_{1\mathbf{2}} & x_{1\mathbf{3}} \\
+1 & x_{2\mathbf{1}} & x_{2\mathbf{2}} & x_{2\mathbf{3}} \\
+\vdots & \vdots & \vdots & \vdots \\
+1 & x_{354\mathbf{1}} & x_{354\mathbf{2}} & x_{354\mathbf{3}}
+\end{bmatrix}
+\begin{bmatrix}
+\beta_0 \\
+\beta_1 \\
+\beta_2 \\
+\beta_3 \\
+\end{bmatrix}
++
+\begin{bmatrix}
+\varepsilon_{1} \\
+\varepsilon_{2} \\
+\varepsilon_{3} \\
+\vdots \\
+\varepsilon_{354}
+\end{bmatrix}
+\end{equation*}
+```
+
+As it is a full rank model, the parameters estimation is:
+
+$$
+\underset{\sim}{\hat\beta} = (X'X)^{-1}X'\underset{\sim}{y}
+$$
+
+The estimated values are:
+```{r}
+# Removing outliers and other variables
+selected_data <- selected_data |> 
+  slice(-c(91, 109, 110, 190, 270, 286)) |> 
+  select(GY, PL_EMERG_COUNT, PH_R8, FLW_DAYS)
+
+# Observations vector
+y <- as.matrix(selected_data$GY)
+
+# Design matrix
+X <- as.matrix(cbind(1, selected_data[,-1]))
+
+# Parameters estimation
+(beta <- solve(t(X)%*% X) %*% t(X) %*% y)
+
+# R check
+(modelo_completo <- lm(selected_data$GY ~ selected_data$PL_EMERG_COUNT + selected_data$PH_R8 + selected_data$FLW_DAYS)) 
+
+```
+
+So, considering the 3 variables, the model adjusted for all observations (without considering effects associated with their specific local/trial) is:
+
+$$
+y_i = 4014.965 - 2.638x_{i1} + 42.728x_{i2} - 71.994x_{i3}  + \varepsilon_i
+$$
+
+Each partial regression coefficient represents the **isolated effect** of that variable in the response variable (considering the presence of the others independent variables in the model).
+
+For exemple, if all independent variables remain constant, with the increase of one unit (1cm) in plant heigth (variable $x_2$), an increase of 42.728 kg/ha in grain yield is expected. The same reasoning follows for the other variables.
+
+First, we will test the hypothesis $H_0: \beta_1 = \beta_2 = \beta_3 = 0$, to verify if at least one variable is significant to explain grain yield.
+
+Assuming $y \sim N_n(XB, \sigma^2I)$, we can calculate:
+
+$$
+F = \frac{QM_{REG}}{QM_{RES}}
+$$
+
+$$
+SQ_{REG} = \underset{\sim}{y}'(X(X'X)^{-1}X' - \frac{1}{n}J)\underset{\sim}{y}
+$$
+
+$$
+SQ_{RES} = \underset{\sim}{y}'(I-X(X'X)^{-1}X')\underset{\sim}{y}
+$$
+
+Since they are quadratic forms, the rank of the associated matrix determines the degrees of freedom of sums of squares. As the matrices are idempotent, their traces are equal to their ranks.
+
+```{r}
+# Declaring matrices
+n <- nrow(X)
+I <- diag(n) # Identity
+J <- matrix(1, nrow=n, ncol=n) # 1´s matrix
+
+# Sums os squares
+nucleo_A <- X %*% solve(t(X) %*% X) %*% t(X) - 1/n * J
+SQ_reg <- t(y) %*% nucleo_A %*% y 
+
+nucleo_B <- I - X %*% solve(t(X) %*% X) %*% t(X)
+SQ_res <- t(y) %*% nucleo_B %*% y
+
+# Degrees of freedom
+gl_reg <- sum(diag(nucleo_A)) 
+gl_res <- sum(diag(nucleo_B)) 
+
+# Mean squares
+QM_reg <- SQ_reg / gl_reg
+QM_res <- SQ_res / gl_res
+
+# F
+F_calculado <- QM_reg / QM_res 
+
+# p-value
+pvalor <- pf(F_calculado, gl_reg, gl_res, lower.tail = FALSE)
+
+# ANOVA table
+tabela_anova <- data.frame(
+  "Variation Causes" = c("Regression", "Residuals"),
+  SQ = c(round(SQ_reg, digits = 3),round(SQ_res, digits =3)),
+  gl = c(gl_reg,gl_res),
+  QM = c(round(QM_reg,digits=3), round(QM_res, digits = 3)),
+  Fcalc = c(round(F_calculado, digits = 3), ""), 
+  Pvalor = c(pvalor,""), check.names = FALSE
+)
+kable(tabela_anova, align = c("l", "r", "r", "r","r"))
+```
+
+To test the same hypothesis with R, we will compare the full and the null-model:
+
+```{r}
+# R
+modelo_nulo <- lm(selected_data$GY~1, data=selected_data) # only intercept
+anova(modelo_nulo, modelo_completo)
+```
+
+The results are the same. We conclude that at least one of the variables are important to explain grain yield, considering the model explained above.
+
+Now, each variable will be tested separately, in the presence of the other variables in the model. The hypothesis are $H_0: \beta_i = 0$ e $H_a : \beta_i \ne 0$, for i = 1, 2, 3, and the test used is: $H_0 : C\underset{\sim}{\beta} = 0$ . 
+
+
+$$
+SQ_{HIP} = (C\underset{\sim}{\hat\beta})'[C (X'X)^{-1}C']^{-1}(C\underset{\sim}{\hat\beta})
+$$
+
+```{r}
+# Vectors C
+c_1 <- matrix(data=c(0,1,0,0),ncol=4)
+c_2 <- matrix(data=c(0,0,1,0),ncol=4)
+c_3 <- matrix(data=c(0,0,0,1),ncol=4)
+
+# Hypothesis 1 - Sums of squares
+Cbeta <- c_1 %*% beta 
+nucleo_C <- solve(c_1 %*% solve(t(X) %*% X) %*% t(c_1))
+SQ_hip_1 <- t(Cbeta) %*% nucleo_C %*% Cbeta
+
+# Hypothesis 2 - Sums of squares
+Cbeta <- c_2 %*% beta 
+nucleo_C <- solve(c_2 %*% solve(t(X) %*% X) %*% t(c_2))
+SQ_hip_2 <- t(Cbeta) %*% nucleo_C %*% Cbeta
+
+# Hypothesis 3 - Sums of squares
+Cbeta <- c_3 %*% beta 
+nucleo_C <- solve(c_3 %*% solve(t(X) %*% X) %*% t(c_3))
+SQ_hip_3 <- t(Cbeta) %*% nucleo_C %*% Cbeta
+
+# F calculados de cada hipótese
+F_calculado_1 <- SQ_hip_1 / QM_res
+F_calculado_2 <- SQ_hip_2 / QM_res
+F_calculado_3 <- SQ_hip_3 / QM_res
+
+# P valor de cada hipótese
+pvalor_1 <- pf(F_calculado_1, 1 , gl_res, lower.tail = FALSE)
+pvalor_2 <- pf(F_calculado_2, 1 , gl_res, lower.tail = FALSE)
+pvalor_3 <- pf(F_calculado_3, 1 , gl_res, lower.tail = FALSE)
+```
+
+
+```{r, echo=FALSE}
+# Imprimindo resultados 
+cat("calculated F - Beta1 = 0:", F_calculado_1,"\tp-value - Beta1 = 0:", pvalor_1, "\ncalculated F - Beta 2 = 0:", F_calculado_2,"\tp-value - Beta2 = 0:", pvalor_2,"\ncalculated F - Beta3 = 0:", F_calculado_3,"\tp-value - Beta3 = 0:", pvalor_3) 
+```
+
+```{r}
+Anova(modelo_completo, type = 3)
+```
+
+The result is equal to the one produced by Anova() function
+
+Considering $\alpha_f = 0.05$ , without correcting the p-values, we **reject** the hypothesis $H_0 : \beta_1 = 0$ ,$H_0 : \beta_2 = 0$ and $H_3: \beta_3 = 0$ , meaning that variables $x_1$ - "PL_EMERG_COUNT", $x_2$ - "PH_R8" e $x_3$ - "FLW_DAYS" are significant in the **full model**.
+
+However, when doing this, the gobalwise level of significance is $\alpha_f=1-(1-0.05)^3= 0.142$ . To adress this problem, Bonferroni's Correction could be used, so that $\alpha_c = 0.05 / 3= 0.016$. Now, $H_0 : \beta_2 =0$ and $H_0: \beta_3 = 0$ are **rejected**, which means that only $x_2$ - "PH_R8" and $x_3$ - "FLW_DAYS" are significant in the **full model**, when correcting the significance level.
+
+
+## Stepwise
+
+Other method that could be used to select variables in the model is stepwise:
+
+1.  In each step is added a variable in the model (usually the one more correlated with the response variable);
+
+2.  The added variable is avaluated in the model, using a criteria such as  p-value, AIC, BIC..
+
+3.  The full model is obtained when the addition of no remaining variable is significant
+
+
+```{r}
+# Verifing multicolinearity
+vif(modelo_completo)
+```
+
+No multicolinearity is observed. The order of variable inclusion will be: $x_2 \rightarrow x_3 \rightarrow x_1$ , which was decided using the correlation between these variables and y.
+
+### First Step - Adding X2 (Plant Height)
+
+Model 1: $y_i = \beta_0 + \beta_2x_{i2} + \varepsilon_i$
+
+Hip: $H_0: \beta_2 = 0$
+
+
+```{r, results='hold'}
+# Design matrix
+X_1 <- X[, c(1,3)]
+
+# Model 1 - SQReg
+nucleo_A_1 <- X_1 %*% solve(t(X_1) %*% X_1) %*% t(X_1) - 1/n * J
+SQ_reg_1 <- t(y) %*% nucleo_A_1 %*% y 
+
+# Model 1 - SQRes
+nucleo_B_1 <- I - X_1 %*% solve(t(X_1) %*% X_1) %*% t(X_1)
+SQ_res_1 <- t(y) %*% nucleo_B_1 %*% y 
+
+# Model 1 - df
+gl_reg_1 <- sum(diag(nucleo_A_1)) 
+gl_res_1 <- sum(diag(nucleo_B_1)) 
+
+# Model 1 - Mean Squares
+QM_reg_1 <- SQ_reg_1 / gl_reg_1
+QM_res_1 <- SQ_res_1 / gl_res_1
+
+# Model 1 - F and p-value
+F_calculado_1 <- QM_reg_1 / QM_res_1 
+pvalor_1 <- pf(F_calculado_1, gl_reg_1, gl_res_1, lower.tail = FALSE)
+
+```
+
+```{r, echo=FALSE}
+# Model 1 - ANOVA Table
+tabela_anova <- data.frame(
+  "Variation Causes" = c("Regression", "Residuals"),
+  SQ = c(round(SQ_reg_1, digits = 3),round(SQ_res_1, digits =3)),
+  gl = c(gl_reg_1,gl_res_1),
+  QM = c(round(QM_reg_1,digits=3), round(QM_res_1, digits = 3)),
+  Fcalc = c(round(F_calculado_1, digits = 3), ""), 
+  Pvalor = c(pvalor_1,""), check.names = FALSE
+)
+kable(tabela_anova, align = c("l", "r", "r", "r","r"))
+```
+
+As this variable was significant, it will be mantained in the model.
+
+### Second Step - Adding X3 (Days to Flowering)
+
+Model 2: $y_i = \beta_0 + \beta_2x_{i2} + \beta_1x_{i3} +\varepsilon_i$
+
+Hip: $H_0: \beta_3 = 0$ . 
+
+If the hypothesis is rejected, we will test $H_0 : \beta_2 = 0$ , to verify if this variable remains significant after adding X3.
+We can compare both models using: 
+$$
+F = \frac{SQ_{REG \ (CURRENT)} - SQ_{REG \ (PREVIOUS)}}{QM_{RES\ (CURRENT)}}
+$$
+
+```{r, results='hold'}
+# Design Matrix
+X_2 <- X[, c(1,3,4)]
+
+# Model 2 - SQReg
+nucleo_A_2 <- X_2 %*% solve(t(X_2) %*% X_2) %*% t(X_2) - 1/n * J
+SQ_reg_2 <- t(y) %*% nucleo_A_2 %*% y 
+
+# Model 2 - SQRes
+nucleo_B_2 <- I - X_2 %*% solve(t(X_2) %*% X_2) %*% t(X_2)
+SQ_res_2 <- t(y) %*% nucleo_B_2 %*% y 
+
+# Model 2 - df
+gl_res_2 <- sum(diag(nucleo_B_2)) 
+
+# Model 2 - Mean Squares
+QM_hip_2 <- SQ_reg_2 - SQ_reg_1
+QM_res_2 <- SQ_res_2 / gl_res_2
+
+# Model 2 - F and p-value
+F_calculado_2 <- QM_hip_2 / QM_res_2 
+pvalor_2 <- pf(F_calculado_2, 1 , gl_res_2, lower.tail = FALSE)
+
+cat("calculated F - Model 2:", F_calculado_2,"\tp-value - Model 2:", pvalor_2)
+```
+
+As variable X3 is significant, it stays in the model. Now, we will calculate if variable X2 remains significant after the addition of X3, by calculating $SQ(x_2 \mid x_3)$.
+
+```{r, results='hold'}
+# Design matrix
+X_2_2 <- X[, c(1,4)] 
+
+# SQReg after removing X2
+nucleo_A_2_2 <- X_2_2 %*% solve(t(X_2_2) %*% X_2_2) %*% t(X_2_2) - 1/n * J
+SQ_reg_2_2 <- t(y) %*% nucleo_A_2_2 %*% y 
+
+# F and p-value
+F_calculado_2_2 <- (SQ_reg_2 - SQ_reg_2_2) / QM_res_2 
+pvalor_2_2 <- pf(F_calculado_2_2, 1, gl_res_2, lower.tail = FALSE)
+
+cat("calculated F - X2 removed:", F_calculado_2_2,"\tp-value - X2 removed:", pvalor_2_2)
+```
+
+It can be seen that $SQ(x_2 \mid x_3)$ is significant, meaning that $x_2$ is still important after the addition of $x_1$. So, both variables stay in the model
+
+### Third 3 - Adding X1 (Plant Emergence Count)
+
+Model 3: $y_i = \beta_0 + \beta_5x_{i2} + \beta_1x_{i3} + \beta_2 x_{i1} +\varepsilon_i$
+
+Hip: $H_0: \beta_1 = 0$ . 
+
+The tests are done as in the previous steps.
+
+```{r, results='hold'}
+# Design matrix
+X_3 <- X  # full model
+
+# Model 3 - SQReg
+nucleo_A_3 <- X_3 %*% solve(t(X_3) %*% X_3) %*% t(X_3) - 1/n * J
+SQ_reg_3 <- t(y) %*% nucleo_A_3 %*% y 
+
+# Model 3 - SQRes
+nucleo_B_3 <- I - X_3 %*% solve(t(X_3) %*% X_3) %*% t(X_3)
+SQ_res_3 <- t(y) %*% nucleo_B_3 %*% y 
+
+# Model 3 - df
+gl_res_3 <- sum(diag(nucleo_B_3)) 
+
+# Model 3 - Mean Squares
+QM_hip_3 <- SQ_reg_3 - SQ_reg_2
+QM_res_3 <- SQ_res_3 / gl_res_3
+
+# Model 3 - F and p-value
+F_calculado_3 <- QM_hip_3 / QM_res_3 
+pvalor_3 <- pf(F_calculado_3, 1 , gl_res_3, lower.tail = FALSE)
+
+cat("calculated F - Model 3:", F_calculado_3,"\tp-value - Modelo 3:", pvalor_3)
+```
+
+We verified that $SQ(x_1 \mid x_2 ,x_3)$ is significant, considering $\alpha_c = 0.05$. Now, we will verify if the other variables remain significant.
+
+```{r, results='hold'}
+# Removing X2
+
+# Design matrix
+X_3_1 <- X[, c(1,2,4)] 
+
+# SQReg after removing X2
+nucleo_A_3_1 <- X_3_1 %*% solve(t(X_3_1) %*% X_3_1) %*% t(X_3_1) - 1/n * J
+SQ_reg_3_1 <- t(y) %*% nucleo_A_3_1 %*% y 
+
+# F 
+F_calculado_3_1 <- (SQ_reg_3 - SQ_reg_3_1) / QM_res_3 
+pvalor_3_1 <- pf(F_calculado_3_1, 1, gl_res_3, lower.tail = FALSE)
+
+# Removing X3
+X_3_2 <- X[, c(1,2,3)]
+
+# SQReg after removing X3
+nucleo_A_3_2 <- X_3_2 %*% solve(t(X_3_2) %*% X_3_2) %*% t(X_3_2) - 1/n * J
+SQ_reg_3_2 <- t(y) %*% nucleo_A_3_2 %*% y 
+
+# F
+F_calculado_3_2 <- (SQ_reg_3 - SQ_reg_3_2) / QM_res_3 
+pvalor_3_2 <- pf(F_calculado_3_2, 1, gl_res_3, lower.tail = FALSE)
+
+# Imprimindo resultados 
+cat("calculated F - Remoção X2:", F_calculado_3_1,"\tp-value - Removing X2:", pvalor_3_1, "\ncalculated F - Remoção X3:", F_calculado_3_2,"\tp-value - Removing X3:", pvalor_3_2)
+```
+
+The same model is obtained using stepwise() function, which uses AIC:
+
+```{r}
+# Utilizando função stepwise
+modelo_stepwise <- step(lm(GY ~ 1, data =as.data.frame(selected_data)),
+scope = list(lower = ~1, upper = ~ PL_EMERG_COUNT + PH_R8 + FLW_DAYS),
+direction = "forward", trace=0)
+
+summary(modelo_stepwise)
+```
+
+Considering the full model, the parameters can be estimated as $\underset{\sim}{\hat\beta} = (X'X)^{-1}X'\underset{\sim}{y}$
+
+```{r}
+# Design matrix
+X_final <- X 
+
+# beta estimation
+beta <- solve(t(X_final)%*%X_final) %*% t(X_final) %*% y
+
+# Total SQ
+nucleo_total <- I - (1/n*J)
+SQ_total <- t(y) %*% nucleo_total %*% y 
+
+# Regression SQ
+nucleo_reg <- X_final %*% solve(t(X_final)%*% X_final) %*% t(X_final) - (1/n * J)
+SQreg_final <- t(y) %*% nucleo_reg %*% y
+
+# R²
+R_2 <- SQreg_final / SQ_total
+
+cat("R²: ",R_2, "\nIntercept:\t\t     ", beta[1], "\nX1 coefficient:   ", beta[2], "\nX2 coefficient:   ", beta[3], "\nX3 coefficient:   ", beta[4])
+
+# R verification
+summary(lm(GY ~ PL_EMERG_COUNT + PH_R8 + FLW_DAYS, data=selected_data))
+```
+
+The final model is:
+
+$$ y_i = 4014.965 - 2.638x_{i1} + 42.728x_{i2} - 71.994x_{i3} + \varepsilon_i $$
+
+$R^2 \approx 0.41$ indicates that the model explains approximately 41% of the observed grain yield variation. Note that we are considering data from different locations, without including an effect associated with locations or the interaction of genotypes x environment. 
+
+Regarding the interpretation of each partial regression coefficient, as explained, they represent the **isolated effect** of that variable in the response (when the other variables are included in the model). For example, in this model, if "Plant Emergence Count (X1)" and "Plant Height (X2)" are constant, when we increase 1 day in X3 (Days to Flowering), the productivity is expected to reduce in 71,9 kg/ha, indicating that cultivars with faster cycles may be better in this environments.
