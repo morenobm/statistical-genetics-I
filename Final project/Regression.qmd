@@ -494,3 +494,187 @@ $$ y_i = 4014.965 - 2.638x_{i1} + 42.728x_{i2} - 71.994x_{i3} + \varepsilon_i $$
 $R^2 \approx 0.41$ indicates that the model explains approximately 41% of the observed grain yield variation. Note that we are considering data from different locations, without including an effect associated with locations or the interaction of genotypes x environment. 
 
 Regarding the interpretation of each partial regression coefficient, as explained, they represent the **isolated effect** of that variable in the response (when the other variables are included in the model). For example, in this model, if "Plant Emergence Count (X1)" and "Plant Height (X2)" are constant, when we increase 1 day in X3 (Days to Flowering), the productivity is expected to reduce in 71,9 kg/ha, indicating that cultivars with faster cycles may be better in this environments.
+
+# SIMPLE LINEAR REGRESSION BY TRIAL
+
+While the across-trials multiple regression provided a comprehensive overview of the main drivers of grain yield in Zambia, it is essential to recognize that phenotypic expression is highly dependent on specific environmental conditions.
+
+In this section, we perform a **Simple Linear Regression** for each of the four locations (Trials 1 to 4) independently. The primary objective is to verify if the positive correlation between plant height ([PH_R8) and yield (GY)]{.underline} observed in the global model holds true for each specific site, while also exploring the behavior of other relevant agronomic traits.
+
+To ensure mathematical transparency *(as proposed by the exercise)*, we calculate the parameters using **Manual Matrix Algebra** through the Ordinary Least Squares (OLS) estimator:
+
+$$ \hat{\beta} = (X'X)^{-1}X'y $$
+
+This step-by-step matrix approach, followed by a validation using the native `lm()` function, allows us to pinpoint environments where the biological response deviates from the general trend—providing a more granular and reliable recommendation for localized crop management.
+
+```{r}
+
+# --- Trial 1: L0118 ---
+cat("\n\n=== MATRICES FOR TRIAL 1 (L0118) ===\n")
+df_T1 <- selected_data %>% 
+  filter(trial == 1, PH_R8 <= 200) %>% 
+  na.omit() #O na.omit() garante que apenas linhas completas entrem no cálculo matricial, os NA estavam "quebrando" a matriz
+
+y_1 <- as.matrix(df_T1$GY)
+X_1 <- as.matrix(cbind(Intercept = 1, PH_R8 = df_T1$PH_R8))
+
+# Álgebra Manual
+beta_1 <- solve(t(X_1) %*% X_1) %*% t(X_1) %*% y_1
+print("1. Matrix (X'X) for Trial 1:")
+print(round(t(X_1) %*% X_1, 2))
+print("2. Manual Coefficients (beta):")
+print(beta_1)
+
+# Prova Real
+cat("--- Validation with lm() ---\n")
+print(coef(lm(GY ~ PH_R8, data = df_T1)))
+
+
+# --- Trial 2: L0133 ---
+cat("\n\n=== MATRICES FOR TRIAL 2 (L0133) ===\n")
+df_T2 <- selected_data %>% filter(trial == 2) %>% na.omit()
+
+y_2 <- as.matrix(df_T2$GY)
+X_2 <- as.matrix(cbind(Intercept = 1, PH_R8 = df_T2$PH_R8))
+
+beta_2 <- solve(t(X_2) %*% X_2) %*% t(X_2) %*% y_2
+print("1. Matrix (X'X) for Trial 2:")
+print(round(t(X_2) %*% X_2, 2))
+print("2. Manual Coefficients (beta):")
+print(beta_2)
+
+cat("--- Validation with lm() ---\n")
+print(coef(lm(GY ~ PH_R8, data = df_T2)))
+
+
+# --- Trial 3: L074 ---
+cat("\n\n=== MATRICES FOR TRIAL 3 (L074) ===\n")
+df_T3 <- selected_data %>% filter(trial == 3) %>% na.omit()
+
+y_3 <- as.matrix(df_T3$GY)
+X_3 <- as.matrix(cbind(Intercept = 1, PH_R8 = df_T3$PH_R8))
+
+beta_3 <- solve(t(X_3) %*% X_3) %*% t(X_3) %*% y_3
+print("1. Matrix (X'X) for Trial 3:")
+print(round(t(X_3) %*% X_3, 2))
+print("2. Manual Coefficients (beta):")
+print(beta_3)
+
+cat("--- Validation with lm() ---\n")
+print(coef(lm(GY ~ PH_R8, data = df_T3)))
+
+
+# --- Trial 4: L0134 ---
+cat("\n\n=== MATRICES FOR TRIAL 4 (L0134) ===\n")
+df_T4 <- selected_data %>% filter(trial == 4) %>% na.omit()
+
+y_4 <- as.matrix(df_T4$GY)
+X_4 <- as.matrix(cbind(Intercept = 1, PH_R8 = df_T4$PH_R8))
+
+beta_4 <- solve(t(X_4) %*% X_4) %*% t(X_4) %*% y_4
+print("1. Matrix (X'X) for Trial 4:")
+print(round(t(X_4) %*% X_4, 2))
+print("2. Manual Coefficients (beta):")
+print(beta_4)
+
+cat("--- Validation with lm() ---\n")
+print(coef(lm(GY ~ PH_R8, data = df_T4)))
+```
+
+To facilitate the interpretation of the calculated parameters, we present below the individual regression plots for each trial. Each panel displays the observed data points, the fitted linear regression line (calculated via Ordinary Least Squares), and the 95% confidence interval. The annotations highlight the Coefficient of Determination ($R^2$) and the p-value, providing a visual confirmation of the goodness-of-fit and the statistical significance of the plant height ($x_2$) as a predictor for grain yield ($y$) in each specific environment.
+
+```{r}
+
+# Função para extrair métricas de ajuste do modelo
+get_metrics <- function(model) {
+  r2 <- round(summary(model)$r.squared, 3)
+  p_val <- summary(model)$coefficients[2,4]
+  p_txt <- ifelse(p_val < 0.001, "< 0.001", paste("=", round(p_val, 3)))
+  return(paste0("R² = ", r2, "\np ", p_txt))
+}
+
+# plots individuais
+p1_plot <- ggplot(df_T1, aes(x = PH_R8, y = GY)) +
+  geom_point(color = "steelblue", alpha = 0.6) +
+  geom_smooth(method = "lm", color = "red", se = TRUE) +
+  annotate("text", x = -Inf, y = Inf, label = get_metrics(mod1), 
+           hjust = -0.2, vjust = 1.5, color = "darkred", fontface = "bold") +
+  labs(title = "Trial 1: L0118", x = "PH_R8 (cm)", y = "GY (kg/ha)") +
+  theme_bw()
+
+p2_plot <- ggplot(df_T2, aes(x = PH_R8, y = GY)) +
+  geom_point(color = "forestgreen", alpha = 0.6) +
+  geom_smooth(method = "lm", color = "red", se = TRUE) +
+  annotate("text", x = -Inf, y = Inf, label = get_metrics(mod2), 
+           hjust = -0.2, vjust = 1.5, color = "darkred", fontface = "bold") +
+  labs(title = "Trial 2: L0133", x = "PH_R8 (cm)", y = "GY (kg/ha)") +
+  theme_bw()
+
+p3_plot <- ggplot(df_T3, aes(x = PH_R8, y = GY)) +
+  geom_point(color = "darkorange", alpha = 0.6) +
+  geom_smooth(method = "lm", color = "red", se = TRUE) +
+  annotate("text", x = -Inf, y = Inf, label = get_metrics(mod3), 
+           hjust = -0.2, vjust = 1.5, color = "darkred", fontface = "bold") +
+  labs(title = "Trial 3: L074", x = "PH_R8 (cm)", y = "GY (kg/ha)") +
+  theme_bw()
+
+p4_plot <- ggplot(df_T4, aes(x = PH_R8, y = GY)) +
+  geom_point(color = "purple", alpha = 0.6) +
+  geom_smooth(method = "lm", color = "red", se = TRUE) +
+  annotate("text", x = -Inf, y = Inf, label = get_metrics(mod4), 
+           hjust = -0.2, vjust = 1.5, color = "darkred", fontface = "bold") +
+  labs(title = "Trial 4: L0134", x = "PH_R8 (cm)", y = "GY (kg/ha)") +
+  theme_bw()
+
+
+
+painel <- (p1_plot + p2_plot) / (p3_plot + p4_plot) +
+  plot_annotation(title = "Regression Analysis by Trial",
+                  subtitle = "Linear models comparing Yield (GY) and Plant Height (PH_R8)",
+                  theme = theme(plot.title = element_text(size = 16, face = "bold", hjust = 0.5)))
+
+print(painel)
+```
+
+The individual trial analysis reveals a significant departure from the across-trials global model, emphasizing that phenotypic expression is highly dependent on specific environmental conditions. While the general trend in Zambia suggested a positive correlation between plant height and yield ($R^2 \approx 0.41$), the dissected data shows that this relationship is strictly environment-specific. In trials such as L0118 and L074, the relationship between plant height ($PH\_R8$) and grain yield ($GY$) proved to be statistically non-significant, as indicated by $p$-values of $0.141$ and $0.116$, respectively. This lack of significance suggests that in these specific sites, vegetative vigor is not a reliable proxy for yield potential, and other environmental variables likely exerted more influence on the final output.
+
+The most striking evidence of GxE interaction is found in Trial L0133, which displays a significant negative correlation ($R^2 = 0.122, p < 0.001$). In this particular environment, genotypes with greater structural height were severely penalized in terms of productivity, a phenomenon often associated with lodging or transpiration stress, where the water demand of a larger leaf area cannot be met by local soil moisture.
+
+In conclusion, the disparity between the global regression model and the individual trial slopes confirms that a "one-size-fits-all" recommendation based on plant height is biologically risky for soybean breeding in Zambia. While height drives yield at a national scale, it can act as a direct constraint in specific environments like L0133
+
+\-
+
+After dissecting the regression models for each individual trial, we conclude this analysis with a consolidated overview of all environments. This "Across-Trials" perspective is fundamental to understanding the general trend of soybean performance in Zambia during the 2023 season. By aggregating the data we can estimate a global slope that represents the average biological response of the crop to variations in plant height ($PH\_R8$). This final step serves as a validation of our initial findings, the goal here is to measure the statistical power of plant height as a primary driver of grain yield on a national scale. Through the same manual matrix algebra and Ordinary Least Squares (OLS) estimation, we aim to confirm if the positive correlation observed in the multiple regression
+
+```{r}
+
+df_across <- selected_data %>% 
+  filter(!(trial == 1 & PH_R8 > 200)) %>% 
+  na.omit()
+
+cat("\n--- ACROSS-TRIALS MATRIX CALCULATION ---\n")
+y_total <- as.matrix(df_across$GY)
+X_total <- as.matrix(cbind(Intercept = 1, PH_R8 = df_across$PH_R8))
+
+# Cálculo matricial
+beta_total <- solve(t(X_total) %*% X_total, t(X_total) %*% y_total)
+print(beta_total)
+
+mod_total <- lm(GY ~ PH_R8, data = df_across)
+r2_all <- round(summary(mod_total)$r.squared, 3)
+
+ggplot(df_across, aes(x = PH_R8, y = GY)) +
+  geom_point(alpha = 0.3, color = "gray40") +
+  geom_smooth(method = "lm", color = "red", fill = "indianred1", size = 1.2) +
+  annotate("label", x = -Inf, y = Inf, 
+           label = paste0("y = ", round(beta_total[2], 2), "x + ", round(beta_total[1], 2), 
+                          "\nR² = ", r2_all, "\np < 0.001"),
+           hjust = -0.1, vjust = 1.2, color = "darkred", fontface = "bold", size = 5) +
+  labs(title = "Across-Trials Overview (Zambia 2023)", 
+       subtitle = "Consolidated relationship between Plant Height and Yield",
+       x = "Plant Height - PH_R8 (cm)", 
+       y = "Grain Yield - GY (kg/ha)") +
+  theme_minimal()
+```
+
+The results from the matrix calculation confirm a positive relationship, with a slope coefficient of $42.71$, aligning perfectly with our initial global multiple regression model. This indicates that, on average, every 1 cm increase in plant height corresponds to an additional $42.71$ kg/ha in yield across the country. Furthermore, the coefficient of determination ($R^2 = 0.333$) suggests that approximately 33% of the yield variation is explained solely by height, while the high statistical significance ($p < 0.001$) provides a solid foundation for breeding selections that favor taller, more vigorous genotypes under general conditions.
