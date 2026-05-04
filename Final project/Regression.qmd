@@ -678,3 +678,174 @@ ggplot(df_across, aes(x = PH_R8, y = GY)) +
 ```
 
 The results from the matrix calculation confirm a positive relationship, with a slope coefficient of $42.71$, aligning perfectly with our initial global multiple regression model. This indicates that, on average, every 1 cm increase in plant height corresponds to an additional $42.71$ kg/ha in yield across the country. Furthermore, the coefficient of determination ($R^2 = 0.333$) suggests that approximately 33% of the yield variation is explained solely by height, while the high statistical significance ($p < 0.001$) provides a solid foundation for breeding selections that favor taller, more vigorous genotypes under general conditions.
+
+Beyond vegetative growth and flowering time, the initial plant stand is a decisive factor for final grain yield. **PL_EMERG_COUNT** represents the number of plants that successfully emerged in each plot. In statistical modeling, this trait often acts as a covariate, as it accounts for variation in yield that is due to planting density rather than genetic potential alone.
+
+```{r}
+# SIMPLE LINEAR REGRESSION BY TRIAL: PL_EMERG_COUNT
+
+# --- Trial 1: L0118 ---
+cat("\n\n=== MATRICES FOR TRIAL 1 (L0118) - PL_EMERG_COUNT ===\n")
+df_T1_PL <- selected_data %>% 
+  filter(trial == 1) %>% 
+  na.omit()
+
+y_1_PL <- as.matrix(df_T1_PL$GY)
+X_1_PL <- as.matrix(cbind(Intercept = 1, PL_EMERG = df_T1_PL$PL_EMERG_COUNT))
+
+# Álgebra Manual
+beta_1_PL <- solve(t(X_1_PL) %*% X_1_PL) %*% t(X_1_PL) %*% y_1_PL
+print("1. Matrix (X'X) for Trial 1:")
+print(round(t(X_1_PL) %*% X_1_PL, 2))
+print("2. Manual Coefficients (beta):")
+print(beta_1_PL)
+
+# Conferindo...
+cat("--- Validation with lm() ---\n")
+print(coef(lm(GY ~ PL_EMERG_COUNT, data = df_T1_PL)))
+
+
+# --- Trial 2: L0133 ---
+cat("\n\n=== MATRICES FOR TRIAL 2 (L0133) - PL_EMERG_COUNT ===\n")
+df_T2_PL <- selected_data %>% filter(trial == 2) %>% na.omit()
+
+y_2_PL <- as.matrix(df_T2_PL$GY)
+X_2_PL <- as.matrix(cbind(Intercept = 1, PL_EMERG = df_T2_PL$PL_EMERG_COUNT))
+
+beta_2_PL <- solve(t(X_2_PL) %*% X_2_PL) %*% t(X_2_PL) %*% y_2_PL
+print("1. Matrix (X'X) for Trial 2:")
+print(round(t(X_2_PL) %*% X_2_PL, 2))
+print("2. Manual Coefficients (beta):")
+print(beta_2_PL)
+
+cat("--- Validation with lm() ---\n")
+print(coef(lm(GY ~ PL_EMERG_COUNT, data = df_T2_PL)))
+
+
+# --- Trial 3: L074 ---
+cat("\n\n=== MATRICES FOR TRIAL 3 (L074) - PL_EMERG_COUNT ===\n")
+df_T3_PL <- selected_data %>% filter(trial == 3) %>% na.omit()
+
+y_3_PL <- as.matrix(df_T3_PL$GY)
+X_3_PL <- as.matrix(cbind(Intercept = 1, PL_EMERG = df_T3_PL$PL_EMERG_COUNT))
+
+beta_3_PL <- solve(t(X_3_PL) %*% X_3_PL) %*% t(X_3_PL) %*% y_3_PL
+print("1. Matrix (X'X) for Trial 3:")
+print(round(t(X_3_PL) %*% X_3_PL, 2))
+print("2. Manual Coefficients (beta):")
+print(beta_3_PL)
+
+cat("--- Validation with lm() ---\n")
+print(coef(lm(GY ~ PL_EMERG_COUNT, data = df_T3_PL)))
+
+
+# --- Trial 4: L0134 ---
+cat("\n\n=== MATRICES FOR TRIAL 4 (L0134) - PL_EMERG_COUNT ===\n")
+df_T4_PL <- selected_data %>% filter(trial == 4) %>% na.omit()
+
+y_4_PL <- as.matrix(df_T4_PL$GY)
+X_4_PL <- as.matrix(cbind(Intercept = 1, PL_EMERG = df_T4_PL$PL_EMERG_COUNT))
+
+beta_4_PL <- solve(t(X_4_PL) %*% X_4_PL) %*% t(X_4_PL) %*% y_4_PL
+print("1. Matrix (X'X) for Trial 4:")
+print(round(t(X_4_PL) %*% X_4_PL, 2))
+print("2. Manual Coefficients (beta):")
+print(beta_4_PL)
+
+cat("--- Validation with lm() ---\n")
+print(coef(lm(GY ~ PL_EMERG_COUNT, data = df_T4_PL)))
+
+```
+
+The individual trial analysis for PL_EMERG_COUNT reveals a heterogeneous response of initial plant stand on grain yield ($GY$), explaining the overall negative trend observed in the 41% global multiple regression model. While in Trials L0133 and L074 an increase in emergence boosted productivity, suggesting populations were below the environmental optimum, the negative coefficients found in Trials L0118 and L0134 suggest that high planting density triggered detrimental intra-specific competition
+
+```{r}
+get_metrics_PL <- function(model) {
+  r2 <- round(summary(model)$r.squared, 3)
+  p_val <- summary(model)$coefficients[2,4]
+  p_txt <- ifelse(p_val < 0.001, "< 0.001", paste("=", round(p_val, 3)))
+  return(paste0("R² = ", r2, "\np ", p_txt))
+}
+
+mod1_PL <- lm(GY ~ PL_EMERG_COUNT, data = df_T1_PL)
+mod2_PL <- lm(GY ~ PL_EMERG_COUNT, data = df_T2_PL)
+mod3_PL <- lm(GY ~ PL_EMERG_COUNT, data = df_T3_PL)
+mod4_PL <- lm(GY ~ PL_EMERG_COUNT, data = df_T4_PL)
+
+# Plots individuais para PL_EMERG_COUNT
+p1_pl_plot <- ggplot(df_T1_PL, aes(x = PL_EMERG_COUNT, y = GY)) +
+  geom_point(color = "steelblue", alpha = 0.6) +
+  geom_smooth(method = "lm", color = "red", se = TRUE) +
+  annotate("text", x = -Inf, y = Inf, label = get_metrics_PL(mod1_PL), 
+           hjust = -0.2, vjust = 1.5, color = "darkred", fontface = "bold") +
+  labs(title = "Trial 1: L0118", x = "Plants Emerged", y = "GY (kg/ha)") +
+  theme_bw()
+
+p2_pl_plot <- ggplot(df_T2_PL, aes(x = PL_EMERG_COUNT, y = GY)) +
+  geom_point(color = "forestgreen", alpha = 0.6) +
+  geom_smooth(method = "lm", color = "red", se = TRUE) +
+  annotate("text", x = -Inf, y = Inf, label = get_metrics_PL(mod2_PL), 
+           hjust = -0.2, vjust = 1.5, color = "darkred", fontface = "bold") +
+  labs(title = "Trial 2: L0133", x = "Plants Emerged", y = "GY (kg/ha)") +
+  theme_bw()
+
+p3_pl_plot <- ggplot(df_T3_PL, aes(x = PL_EMERG_COUNT, y = GY)) +
+  geom_point(color = "darkorange", alpha = 0.6) +
+  geom_smooth(method = "lm", color = "red", se = TRUE) +
+  annotate("text", x = -Inf, y = Inf, label = get_metrics_PL(mod3_PL), 
+           hjust = -0.2, vjust = 1.5, color = "darkred", fontface = "bold") +
+  labs(title = "Trial 3: L074", x = "Plants Emerged", y = "GY (kg/ha)") +
+  theme_bw()
+
+p4_pl_plot <- ggplot(df_T4_PL, aes(x = PL_EMERG_COUNT, y = GY)) +
+  geom_point(color = "purple", alpha = 0.6) +
+  geom_smooth(method = "lm", color = "red", se = TRUE) +
+  annotate("text", x = -Inf, y = Inf, label = get_metrics_PL(mod4_PL), 
+           hjust = -0.2, vjust = 1.5, color = "darkred", fontface = "bold") +
+  labs(title = "Trial 4: L0134", x = "Plants Emerged", y = "GY (kg/ha)") +
+  theme_bw()
+
+# Painel Consolidado
+painel_PL <- (p1_pl_plot + p2_pl_plot) / (p3_pl_plot + p4_pl_plot) +
+  plot_annotation(title = "Regression Analysis by Trial: Plant Emergence",
+                  subtitle = "Linear models comparing Yield (GY) and Emergence Count (PL_EMERG_COUNT)",
+                  theme = theme(plot.title = element_text(size = 16, face = "bold", hjust = 0.5)))
+
+print(painel_PL)
+```
+
+To visualize the impact of plant density on yield across different environments, the following panel presents individual linear regressions for each trial. The results confirm a diverse biological response: while Trials L0133 and L074 show a statistically significant positive relationship ($p < 0.05$), Trials L0118 and L0134 exhibit non-significant slopes ($p > 0.40$). This visual evidence supports the matrix calculations and highlights that plant emergence acts as a critical environmental filter, where increased stand density only translates to higher grain yield in specific responsive environments.
+
+```{r}
+df_across_PL <- selected_data %>% 
+  na.omit()
+
+cat("\n--- ACROSS-TRIALS MATRIX CALCULATION (PLANT EMERGENCE) ---\n")
+y_total_PL <- as.matrix(df_across_PL$GY)
+X_total_PL <- as.matrix(cbind(Intercept = 1, PL = df_across_PL$PL_EMERG_COUNT))
+
+# Matrix Calculation
+beta_total_PL <- solve(t(X_total_PL) %*% X_total_PL, t(X_total_PL) %*% y_total_PL)
+print(beta_total_PL)
+
+mod_total_PL <- lm(GY ~ PL_EMERG_COUNT, data = df_across_PL)
+r2_all_PL <- round(summary(mod_total_PL)$r.squared, 3)
+
+# Visualizing Across-Trials for PL_EMERG_COUNT
+ggplot(df_across_PL, aes(x = PL_EMERG_COUNT, y = GY)) +
+  geom_point(alpha = 0.3, color = "gray40") +
+  geom_smooth(method = "lm", color = "blue", fill = "skyblue", size = 1.2) +
+  annotate("label", x = -Inf, y = Inf, 
+           label = paste0("y = ", round(beta_total_PL[2], 2), "x + ", round(beta_total_PL[1], 2), 
+                          "\nR² = ", r2_all_PL, "\np = ", round(summary(mod_total_PL)$coefficients[2,4], 3)),
+           hjust = -0.1, vjust = 1.2, color = "darkblue", fontface = "bold", size = 5) +
+  labs(title = "Across-Trials Overview: Plant Emergence (Zambia 2023)", 
+       subtitle = "Consolidated relationship between Emergence Count and Yield",
+       x = "Plants Emerged (Count)", 
+       y = "Grain Yield - GY (kg/ha)") +
+  theme_minimal()
+
+```
+
+The across-trials analysis for PL_EMERG_COUNT reveals a non-significant relationship between plant emergence and grain yield in Zambia ($p = 0.345$). The estimated slope of $-1.18$ suggests that, on a national level, increasing the initial plant stand did not result in productivity gains during the 2023 season. With an $R^2$ of only $0.003$, the emergence count explains less than 1% of the total variation in yield when all environments are aggregated.
+
