@@ -495,7 +495,7 @@ $R^2 \approx 0.41$ indicates that the model explains approximately 41% of the ob
 
 Regarding the interpretation of each partial regression coefficient, as explained, they represent the **isolated effect** of that variable in the response (when the other variables are included in the model). For example, in this model, if "Plant Emergence Count (X1)" and "Plant Height (X2)" are constant, when we increase 1 day in X3 (Days to Flowering), the productivity is expected to reduce in 71,9 kg/ha, indicating that cultivars with faster cycles may be better in this environments.
 
-# SIMPLE LINEAR REGRESSION BY TRIAL
+# SIMPLE LINEAR REGRESSION BY TRIAL - Plant height
 
 While the across-trials multiple regression provided a comprehensive overview of the main drivers of grain yield in Zambia, it is essential to recognize that phenotypic expression is highly dependent on specific environmental conditions.
 
@@ -508,6 +508,15 @@ $$ \hat{\beta} = (X'X)^{-1}X'y $$
 This step-by-step matrix approach, followed by a validation using the native `lm()` function, allows us to pinpoint environments where the biological response deviates from the general trend—providing a more granular and reliable recommendation for localized crop management.
 
 ```{r}
+selected_data <- data |> 
+  select(COUNTRY, YEAR, env, gen, loc, SEASON, rep, check, all_of(traits)) |> 
+  filter(loc %in% c("L0118", "L0133", "L074", "L0134") & YEAR == "2023") |> 
+  mutate(trial = case_when(
+    loc == "L0118" & YEAR == "2023" ~ 1,
+    loc == "L0133" & YEAR == "2023" ~ 2,
+    loc == "L074"  & YEAR == "2023" ~ 3,
+    loc == "L0134" & YEAR == "2023" ~ 4)) |> 
+  mutate(trial = as.factor(trial))
 
 # --- Trial 1: L0118 ---
 cat("\n\n=== MATRICES FOR TRIAL 1 (L0118) ===\n")
@@ -528,6 +537,7 @@ print(beta_1)
 # Prova Real
 cat("--- Validation with lm() ---\n")
 print(coef(lm(GY ~ PH_R8, data = df_T1)))
+mod1 <- lm(GY ~ PH_R8, data = df_T1)
 
 
 # --- Trial 2: L0133 ---
@@ -545,6 +555,7 @@ print(beta_2)
 
 cat("--- Validation with lm() ---\n")
 print(coef(lm(GY ~ PH_R8, data = df_T2)))
+mod2 <- lm(GY ~ PH_R8, data = df_T2) 
 
 
 # --- Trial 3: L074 ---
@@ -562,6 +573,7 @@ print(beta_3)
 
 cat("--- Validation with lm() ---\n")
 print(coef(lm(GY ~ PH_R8, data = df_T3)))
+mod3 <- lm(GY ~ PH_R8, data = df_T3)
 
 
 # --- Trial 4: L0134 ---
@@ -579,6 +591,7 @@ print(beta_4)
 
 cat("--- Validation with lm() ---\n")
 print(coef(lm(GY ~ PH_R8, data = df_T4)))
+mod4 <- lm(GY ~ PH_R8, data = df_T4)
 ```
 
 To facilitate the interpretation of the calculated parameters, we present below the individual regression plots for each trial. Each panel displays the observed data points, the fitted linear regression line (calculated via Ordinary Least Squares), and the 95% confidence interval. The annotations highlight the Coefficient of Determination ($R^2$) and the p-value, providing a visual confirmation of the goodness-of-fit and the statistical significance of the plant height ($x_2$) as a predictor for grain yield ($y$) in each specific environment.
@@ -849,3 +862,656 @@ ggplot(df_across_PL, aes(x = PL_EMERG_COUNT, y = GY)) +
 
 The across-trials analysis for PL_EMERG_COUNT reveals a non-significant relationship between plant emergence and grain yield in Zambia ($p = 0.345$). The estimated slope of $-1.18$ suggests that, on a national level, increasing the initial plant stand did not result in productivity gains during the 2023 season. With an $R^2$ of only $0.003$, the emergence count explains less than 1% of the total variation in yield when all environments are aggregated.
 
+# SIMPLE LINEAR REGRESSION BY TRIAL - Days to flowering
+```{r}
+#Response variable
+Y_flw <- as.matrix(selected_data$FLW_DAYS)
+
+# X matrix - only GY
+X = model.matrix(~selected_data[,"GY"])
+
+#Beta hat
+X_line_X <- crossprod(X)
+X_line_X_inv <- solve(X_line_X)
+X_line_Y <- crossprod(X, Y_flw)
+beta_hat <- X_line_X_inv %*% X_line_Y
+
+model_GY <- lm(FLW_DAYS ~ GY, data = selected_data)
+summary(model_GY);beta_hat
+
+library(plotly)
+
+plot_ly(selected_data, 
+        x = ~GY, 
+        y = ~PH_R8, 
+        z = ~FLW_DAYS, 
+        type = "scatter3d", 
+        mode = "markers") %>%
+  add_surface(
+    x = ~GY,
+    y = ~PH_R8,
+    z = ~matrix(predict(model_GY_2), nrow = length(unique(selected_data$GY)))
+  )
+
+library(ggplot2)
+ggplot(data = selected_data, aes(x = GY, y = FLW_DAYS)) + 
+  geom_point(color = "purple", alpha = 0.6) +
+  geom_smooth(method = "lm", color = "red", se = TRUE) +
+  annotate("text", x = -Inf, y = Inf, label = get_metrics(model_GY), 
+           hjust = -0.2, vjust = 1.5, color = "darkred", fontface = "bold") +
+  labs(title = "All Trials", x = "GY (kg/ha)", y = "FLW_DAYS") +
+  theme_bw()
+
+# X matrix - GY and PH_R8
+X = model.matrix(~GY + PH_R8, data = selected_data)
+
+#Beta hat
+X_line_X <- crossprod(X)
+X_line_X_inv <- solve(X_line_X)
+X_line_Y <- crossprod(X, Y_flw)
+beta_hat <- X_line_X_inv %*% X_line_Y; beta_hat
+
+model_GY_2 <- lm(FLW_DAYS ~ GY + PH_R8, data = selected_data)
+summary(model_GY_2)
+
+# X matrix - GY, PH_R8 and PL_EMERG_COUNT
+X = model.matrix(~ GY + PH_R8 + PL_EMERG_COUNT, data = selected_data)
+
+#Beta hat
+X_line_X <- crossprod(X)
+X_line_X_inv <- solve(X_line_X)
+X_line_Y <- crossprod(X, Y_flw)
+beta_hat <- X_line_X_inv %*% X_line_Y; beta_hat
+
+model_GY_3 <- lm(FLW_DAYS ~ GY + PH_R8 + PL_EMERG_COUNT, data = selected_data)
+summary(model_GY_3)
+```
+The performance of adding variables to the model increased the Adjusted R-squared of the model. In this case all added variables were significant for 5%. This fact suggests that they are important and contributes to explain of the response variable.
+
+### PH
+```{r}
+# X matrix - PH_R8
+X = model.matrix(~ PH_R8, data = selected_data)
+
+#Beta hat
+X_line_X <- crossprod(X)
+X_line_X_inv <- solve(X_line_X)
+X_line_Y <- crossprod(X, Y_flw)
+beta_hat <- X_line_X_inv %*% X_line_Y; beta_hat
+
+model_PH <- lm(FLW_DAYS ~ PH_R8, data = selected_data)
+summary(model_PH)
+
+
+library(ggplot2)
+ggplot(data = selected_data, aes(x = PH_R8, y = FLW_DAYS)) + 
+  geom_jitter() + 
+  geom_smooth(method = 'lm', color = "#10342d") + 
+  theme_minimal() + 
+  theme(text = element_text(size = 20))
+
+# X matrix - PH_R8 and GY
+X = model.matrix(~ PH_R8 + GY, data = selected_data)
+
+#Beta hat
+X_line_X <- crossprod(X)
+X_line_X_inv <- solve(X_line_X)
+X_line_Y <- crossprod(X, Y_flw)
+beta_hat <- X_line_X_inv %*% X_line_Y; beta_hat
+
+model_PH_1 <- lm(FLW_DAYS ~ PH_R8 + GY, data = selected_data)
+summary(model_PH_1)
+
+# X matrix - PH_R8, GY and PL_EMERG_COUNT
+X = model.matrix(~ PH_R8 + GY + PL_EMERG_COUNT, data = selected_data)
+
+#Beta hat
+X_line_X <- crossprod(X)
+X_line_X_inv <- solve(X_line_X)
+X_line_Y <- crossprod(X, Y_flw)
+beta_hat <- X_line_X_inv %*% X_line_Y; beta_hat
+
+model_PH_2 <- lm(FLW_DAYS ~ PH_R8 + GY + PL_EMERG_COUNT, data = selected_data)
+summary(model_PH_2)
+
+# X matrix - PH_R8, GY and PL_EMERG_COUNT and interaction
+X <- model.matrix(~ PH_R8 + GY * PL_EMERG_COUNT, data = selected_data)
+
+#Beta hat
+X_line_X <- crossprod(X)
+X_line_X_inv <- solve(X_line_X)
+X_line_Y <- crossprod(X, Y_flw)
+beta_hat <- X_line_X_inv %*% X_line_Y; beta_hat
+
+model_PH_3 <- lm(FLW_DAYS ~ PH_R8 + GY*PL_EMERG_COUNT, data = selected_data)
+summary(model_PH_3)
+
+# X matrix - PH_R8, GY and PL_EMERG_COUNT and interaction
+X <- model.matrix(~ PH_R8*GY + GY * PL_EMERG_COUNT, data = selected_data)
+
+#Beta hat
+X_line_X <- crossprod(X)
+X_line_X_inv <- solve(X_line_X)
+X_line_Y <- crossprod(X, Y_flw)
+beta_hat <- X_line_X_inv %*% X_line_Y; beta_hat
+
+model_PH_4 <- lm(FLW_DAYS ~ PH_R8*GY + GY*PL_EMERG_COUNT, data = selected_data)
+summary(model_PH_4)
+```
+O **PH_R8** é não significativo no modelo quando é a única variável. Ao adicionar outras variáveis, ele se torna significativo.
+
+### PL_EMERG_COUNT
+```{r}
+# X matrix - PL_EMERG_COUNT
+X <- model.matrix(~ PL_EMERG_COUNT, data = selected_data)
+
+#Beta hat
+X_line_X <- crossprod(X)
+X_line_X_inv <- solve(X_line_X)
+X_line_Y <- crossprod(X, Y_flw)
+beta_hat <- X_line_X_inv %*% X_line_Y; beta_hat
+
+model_PL <- lm(FLW_DAYS ~ PL_EMERG_COUNT, data = selected_data)
+summary(model_PL)
+
+library(ggplot2)
+ggplot(data = selected_data, aes(x = PL_EMERG_COUNT, y = FLW_DAYS)) + 
+  geom_jitter() + 
+  geom_smooth(method = 'lm', color = "#10342d") + 
+  theme_minimal() + 
+  theme(text = element_text(size = 20))
+
+# X matrix - PH_R8, GY and PL_EMERG_COUNT and interaction
+X <- model.matrix(~ PL_EMERG_COUNT + GY, data = selected_data)
+## ESSE MODELO ESTÁ DANDO ERRADO!!
+#Beta hat
+X_line_X <- crossprod(X)
+X_line_X_inv <- solve(X_line_X)
+X_line_Y <- crossprod(X, Y_flw)
+beta_hat <- X_line_X_inv %*% X_line_Y; beta_hat
+model_PL_1 <- lm(FLW_DAYS ~ PL_EMERG_COUNT + GY, data = selected_data)
+summary(model_PH_1)
+
+model_PH_2 <- lm(FLW_DAYS ~ PL_EMERG_COUNT + GY +PH_R8 , data = selected_data)
+summary(model_PH_2)
+```
+Adding only the PL count ins the variable that explains the higher level of response variable. That is, the initial counting explains better the relationship of the days to flowering of a plant than the grain yield. The higher the plants in a line, the lesser days it takes for the plants to flower.
+
+## Manually matrix equations
+
+## Considering one trial at time
+
+### Trial 1
+
+### GY
+```{r}
+Y_flw <- trial_1[,9]
+# X matrix - PH_R8, GY and PL_EMERG_COUNT and interaction
+X <- model.matrix(~ GY, data = trial_1)
+head(trial_1)
+
+#Beta hat
+X_line_X <- crossprod(X)
+X_line_X_inv <- solve(X_line_X)
+X_line_Y <- crossprod(X, Y_flw)
+beta_hat <- X_line_X_inv %*% X_line_Y; beta_hat
+
+model_GY <- lm(FLW_DAYS ~ GY, data = trial_1)
+summary(model_GY)
+
+library(ggplot2)
+ggplot(data = trial_1, aes(x = GY, y = FLW_DAYS)) + 
+  geom_jitter() + 
+  geom_smooth(method = 'lm', color = "#10342d") + 
+  theme_minimal() + 
+  theme(text = element_text(size = 20))
+
+# X matrix - PH_R8, GY and PL_EMERG_COUNT and interaction
+X <- model.matrix(~ GY + PH_R8, data = trial_1)
+
+#Beta hat
+X_line_X <- crossprod(X)
+X_line_X_inv <- solve(X_line_X)
+X_line_Y <- crossprod(X, Y_flw)
+beta_hat <- X_line_X_inv %*% X_line_Y; beta_hat
+
+model_GY_2 <- lm(FLW_DAYS ~ GY + PH_R8, data = trial_1)
+summary(model_GY_2)
+
+# X matrix - PH_R8, GY and PL_EMERG_COUNT and interaction
+X <- model.matrix(~ GY + PL_EMERG_COUNT, data = trial_1)
+
+#Beta hat
+X_line_X <- crossprod(X)
+X_line_X_inv <- solve(X_line_X)
+X_line_Y <- crossprod(X, Y_flw)
+beta_hat <- X_line_X_inv %*% X_line_Y; beta_hat
+
+model_GY_3 <- lm(FLW_DAYS ~ GY + PL_EMERG_COUNT, data = trial_1)
+summary(model_GY_3)
+
+# X matrix - PH_R8, GY and PL_EMERG_COUNT and interaction
+X <- model.matrix(~ GY + PL_EMERG_COUNT+PH_R8, data = trial_1)
+
+#Beta hat
+X_line_X <- crossprod(X)
+X_line_X_inv <- solve(X_line_X)
+X_line_Y <- crossprod(X, Y_flw)
+beta_hat <- X_line_X_inv %*% X_line_Y; beta_hat
+
+model_GY_4 <- lm(FLW_DAYS ~ GY + PL_EMERG_COUNT+PH_R8, data = trial_1)
+summary(model_GY_4) 
+
+library(plotly)
+
+plot_ly(selected_data, 
+        x = ~GY, 
+        y = ~PH_R8, 
+        z = ~FLW_DAYS, 
+        type = "scatter3d", 
+        mode = "markers") %>%
+  add_surface(
+    x = ~GY,
+    y = ~PH_R8,
+    z = ~matrix(predict(model_GY_2), nrow = length(unique(selected_data$GY)))
+  )
+```
+When considering only trial 1, the only variable considered is GY. 
+
+### PH
+```{r}
+# X matrix - PH_R8, GY and PL_EMERG_COUNT and interaction
+X <- model.matrix(~ PH_R8, data = trial_1)
+
+#Beta hat
+X_line_X <- crossprod(X)
+X_line_X_inv <- solve(X_line_X)
+X_line_Y <- crossprod(X, Y_flw)
+beta_hat <- X_line_X_inv %*% X_line_Y; beta_hat
+
+
+model_PH <- lm(FLW_DAYS ~ PH_R8, data = trial_1)
+summary(model_PH)
+
+library(ggplot2)
+ggplot(data = trial_1, aes(x = PH_R8, y = FLW_DAYS)) + 
+  geom_jitter() + 
+  geom_smooth(method = 'lm', color = "#10342d") + 
+  theme_minimal() + 
+  theme(text = element_text(size = 20))
+
+# X matrix - PH_R8, GY and PL_EMERG_COUNT and interaction
+X <- model.matrix(~ PH_R8 + GY, data = trial_1)
+
+#Beta hat
+X_line_X <- crossprod(X)
+X_line_X_inv <- solve(X_line_X)
+X_line_Y <- crossprod(X, Y_flw)
+beta_hat <- X_line_X_inv %*% X_line_Y; beta_hat
+
+model_PH_1 <- lm(FLW_DAYS ~ PH_R8 + GY, data = trial_1)
+summary(model_PH_1)
+
+# X matrix - PH_R8, GY and PL_EMERG_COUNT and interaction
+X <- model.matrix(~ PH_R8 + GY + PL_EMERG_COUNT, data = trial_1)
+
+#Beta hat
+X_line_X <- crossprod(X)
+X_line_X_inv <- solve(X_line_X)
+X_line_Y <- crossprod(X, Y_flw)
+beta_hat <- X_line_X_inv %*% X_line_Y; beta_hat
+
+model_PH_2 <- lm(FLW_DAYS ~ PH_R8 + GY + PL_EMERG_COUNT, data = trial_1)
+summary(model_PH_2)
+
+# X matrix - PH_R8, GY and PL_EMERG_COUNT and interaction
+X <- model.matrix(~ PH_R8 + GY*PL_EMERG_COUNT, data = trial_1)
+
+#Beta hat
+X_line_X <- crossprod(X)
+X_line_X_inv <- solve(X_line_X)
+X_line_Y <- crossprod(X, Y_flw)
+beta_hat <- X_line_X_inv %*% X_line_Y; beta_hat
+
+model_PH_3 <- lm(FLW_DAYS ~ PH_R8 + GY*PL_EMERG_COUNT, data = trial_1)
+summary(model_PH_3)
+
+# X matrix - PH_R8, GY and PL_EMERG_COUNT and interaction
+X <- model.matrix(~ PH_R8*GY + GY*PL_EMERG_COUNT, data = trial_1)
+
+#Beta hat
+X_line_X <- crossprod(X)
+X_line_X_inv <- solve(X_line_X)
+X_line_Y <- crossprod(X, Y_flw)
+beta_hat <- X_line_X_inv %*% X_line_Y; beta_hat
+
+model_PH_4 <- lm(FLW_DAYS ~ PH_R8*GY + GY*PL_EMERG_COUNT, data = trial_1)
+summary(model_PH_4)
+```
+O **PH_R8** é significativo no modelo quando é a única variável. Ao adicionar GY, ele se torna NÃO significativo. Testando outras combinações mostram que nenhuma das variáveis explicam a variável resposta.
+
+### PL_EMERG_COUNT
+```{r}
+# X matrix - PH_R8, GY and PL_EMERG_COUNT and interaction
+X <- model.matrix(~ PL_EMERG_COUNT, data = trial_1)
+
+#Beta hat
+X_line_X <- crossprod(X)
+X_line_X_inv <- solve(X_line_X)
+X_line_Y <- crossprod(X, Y_flw)
+beta_hat <- X_line_X_inv %*% X_line_Y; beta_hat
+
+model_PL <- lm(FLW_DAYS ~ PL_EMERG_COUNT, data = trial_1)
+summary(model_PL)
+
+library(ggplot2)
+ggplot(data = trial_1, aes(x = PL_EMERG_COUNT, y = FLW_DAYS)) + 
+  geom_jitter() + 
+  geom_smooth(method = 'lm', color = "#10342d") + 
+  theme_minimal() + 
+  theme(text = element_text(size = 20))
+
+model_PL_1 <- lm(FLW_DAYS ~ PL_EMERG_COUNT + GY, data = trial_1)
+summary(model_PH_1)
+
+model_PH_2 <- lm(FLW_DAYS ~ PL_EMERG_COUNT + GY +PH_R8 , data = trial_1)
+summary(model_PH_2)
+```
+Here only the grain yield was sufficient to explain the response variable. This suggests that looking at one trial only is not recommended to modelling.
+
+### Trial 2
+
+### GY
+```{r}
+Y_flw <- trial_2[,9]
+# X matrix - PH_R8, GY and PL_EMERG_COUNT and interaction
+X <- model.matrix(~ GY, data = trial_2)
+
+#Beta hat
+X_line_X <- crossprod(X)
+X_line_X_inv <- solve(X_line_X)
+X_line_Y <- crossprod(X, Y_flw)
+beta_hat <- X_line_X_inv %*% X_line_Y; beta_hat
+
+model_GY <- lm(FLW_DAYS ~ GY, data = trial_2)
+summary(model_GY)
+
+library(ggplot2)
+ggplot(data = trial_2, aes(x = GY, y = FLW_DAYS)) + 
+  geom_jitter() + 
+  geom_smooth(method = 'lm', color = "#10342d") + 
+  theme_minimal() + 
+  theme(text = element_text(size = 20))
+
+model_GY_2 <- lm(FLW_DAYS ~ GY + PH_R8, data = trial_2)
+summary(model_GY_2)
+
+model_GY_3 <- lm(FLW_DAYS ~ GY + PL_EMERG_COUNT, data = trial_2)
+summary(model_GY_3)
+
+model_GY_3 <- lm(FLW_DAYS ~ GY + PL_EMERG_COUNT+PH_R8, data = trial_2)
+summary(model_GY_3) 
+```
+It is visible this process of adding and subtracting variables from the model is complex and depends of the data. GY was significant in many scenarios, but when interacting with other ones, it wasn't anymore.
+
+### PH
+```{r}
+# X matrix - PH_R8, GY and PL_EMERG_COUNT and interaction
+X <- model.matrix(~ PH_R8, data = trial_2)
+
+#Beta hat
+X_line_X <- crossprod(X)
+X_line_X_inv <- solve(X_line_X)
+X_line_Y <- crossprod(X, Y_flw)
+beta_hat <- X_line_X_inv %*% X_line_Y; beta_hat
+
+model_PH <- lm(FLW_DAYS ~ PH_R8, data = trial_2)
+summary(model_PH)
+
+library(ggplot2)
+ggplot(data = trial_2, aes(x = PH_R8, y = FLW_DAYS)) + 
+  geom_jitter() + 
+  geom_smooth(method = 'lm', color = "#10342d") + 
+  theme_minimal() + 
+  theme(text = element_text(size = 20))
+
+model_PH_1 <- lm(FLW_DAYS ~ PH_R8 + GY, data = trial_2)
+summary(model_PH_1)
+
+model_PH_2 <- lm(FLW_DAYS ~ PH_R8 + GY + PL_EMERG_COUNT, data = trial_2)
+summary(model_PH_2)
+
+model_PH_3 <- lm(FLW_DAYS ~ PH_R8 + GY*PL_EMERG_COUNT, data = trial_2)
+summary(model_PH_3)
+
+model_PH_4 <- lm(FLW_DAYS ~ PH_R8*GY + GY*PL_EMERG_COUNT, data = trial_2)
+summary(model_PH_4)
+```
+The plant height does not explain the response variable in any combination of variables in different models.
+
+### PL_EMERG_COUNT
+```{r}
+# X matrix - PH_R8, GY and PL_EMERG_COUNT and interaction
+X <- model.matrix(~ PL_EMERG_COUNT, data = trial_2)
+
+#Beta hat
+X_line_X <- crossprod(X)
+X_line_X_inv <- solve(X_line_X)
+X_line_Y <- crossprod(X, Y_flw)
+beta_hat <- X_line_X_inv %*% X_line_Y; beta_hat
+
+model_PL <- lm(FLW_DAYS ~ PL_EMERG_COUNT, data = trial_2)
+summary(model_PL)
+
+library(ggplot2)
+ggplot(data = trial_2, aes(x = PL_EMERG_COUNT, y = FLW_DAYS)) + 
+  geom_jitter() + 
+  geom_smooth(method = 'lm', color = "#10342d") + 
+  theme_minimal() + 
+  theme(text = element_text(size = 20))
+
+model_PL_1 <- lm(FLW_DAYS ~ PL_EMERG_COUNT + GY, data = trial_2)
+summary(model_PL_1)
+
+model_PL_2 <- lm(FLW_DAYS ~ PL_EMERG_COUNT + GY + PH_R8 , data = trial_2)
+summary(model_PL_2)
+```
+
+### Trial 3
+
+### GY
+```{r}
+Y_flw <- trial_3[,9]
+
+# X matrix - PH_R8, GY and PL_EMERG_COUNT and interaction
+X <- model.matrix(~ GY, data = trial_3)
+
+#Beta hat
+X_line_X <- crossprod(X)
+X_line_X_inv <- solve(X_line_X)
+X_line_Y <- crossprod(X, Y_flw)
+beta_hat <- X_line_X_inv %*% X_line_Y; beta_hat
+
+model_GY <- lm(FLW_DAYS ~ GY, data = trial_3)
+summary(model_GY)
+
+library(ggplot2)
+ggplot(data = trial_3, aes(x = GY, y = FLW_DAYS)) + 
+  geom_jitter() + 
+  geom_smooth(method = 'lm', color = "#10342d") + 
+  theme_minimal() + 
+  theme(text = element_text(size = 20))
+
+model_GY_2 <- lm(FLW_DAYS ~ GY + PH_R8, data = trial_3)
+summary(model_GY_2)
+
+model_GY_3 <- lm(FLW_DAYS ~ GY + PL_EMERG_COUNT, data = trial_3)
+summary(model_GY_3)
+
+model_GY_3 <- lm(FLW_DAYS ~ GY + PL_EMERG_COUNT+PH_R8, data = trial_3)
+summary(model_GY_3) 
+```
+It is visible this process of adding and subtracting variables from the model is complex and depends of the data. GY was significant in many scenarios, but when interacting with other ones, it wasn't anymore.
+
+### PH
+```{r}
+# X matrix - PH_R8, GY and PL_EMERG_COUNT and interaction
+X <- model.matrix(~ PH_R8, data = trial_3)
+
+#Beta hat
+X_line_X <- crossprod(X)
+X_line_X_inv <- solve(X_line_X)
+X_line_Y <- crossprod(X, Y_flw)
+beta_hat <- X_line_X_inv %*% X_line_Y; beta_hat
+
+model_PH <- lm(FLW_DAYS ~ PH_R8, data = trial_3)
+summary(model_PH)
+
+library(ggplot2)
+ggplot(data = trial_3, aes(x = PH_R8, y = FLW_DAYS)) + 
+  geom_jitter() + 
+  geom_smooth(method = 'lm', color = "#10342d") + 
+  theme_minimal() + 
+  theme(text = element_text(size = 20))
+
+model_PH_1 <- lm(FLW_DAYS ~ PH_R8 + GY, data = trial_3)
+summary(model_PH_1)
+
+model_PH_2 <- lm(FLW_DAYS ~ PH_R8 + GY + PL_EMERG_COUNT, data = trial_3)
+summary(model_PH_2)
+
+model_PH_3 <- lm(FLW_DAYS ~ PH_R8 + GY*PL_EMERG_COUNT, data = trial_3)
+summary(model_PH_3)
+
+model_PH_4 <- lm(FLW_DAYS ~ PH_R8*GY + GY*PL_EMERG_COUNT, data = trial_3)
+summary(model_PH_4)
+```
+Maybe would be interesting using a **stepwise** method to select the variables here, because different interactions had different outcomes.
+
+### PL_EMERG_COUNT
+```{r}
+# X matrix - PH_R8, GY and PL_EMERG_COUNT and interaction
+X <- model.matrix(~ PL_EMERG_COUNT, data = trial_3)
+
+#Beta hat
+X_line_X <- crossprod(X)
+X_line_X_inv <- solve(X_line_X)
+X_line_Y <- crossprod(X, Y_flw)
+beta_hat <- X_line_X_inv %*% X_line_Y; beta_hat
+
+model_PL <- lm(FLW_DAYS ~ PL_EMERG_COUNT, data = trial_3)
+summary(model_PL)
+
+library(ggplot2)
+ggplot(data = trial_3, aes(x = PL_EMERG_COUNT, y = FLW_DAYS)) + 
+  geom_jitter() + 
+  geom_smooth(method = 'lm', color = "#10342d") + 
+  theme_minimal() + 
+  theme(text = element_text(size = 20))
+
+model_PL_1 <- lm(FLW_DAYS ~ PL_EMERG_COUNT + GY, data = trial_3)
+summary(model_PL_1)
+
+model_PL_2 <- lm(FLW_DAYS ~ PL_EMERG_COUNT + GY + PH_R8 , data = trial_3)
+summary(model_PL_2)
+```
+The plant emergence here was not significant in any scenario.
+
+### Trial 4
+
+### GY
+```{r}
+Y_flw <- trial_4[,9]
+
+# X matrix - PH_R8, GY and PL_EMERG_COUNT and interaction
+X <- model.matrix(~ GY, data = trial_4)
+
+#Beta hat
+X_line_X <- crossprod(X)
+X_line_X_inv <- solve(X_line_X)
+X_line_Y <- crossprod(X, Y_flw)
+beta_hat <- X_line_X_inv %*% X_line_Y; beta_hat
+
+model_GY <- lm(FLW_DAYS ~ GY, data = trial_4)
+summary(model_GY)
+
+library(ggplot2)
+ggplot(data = trial_4, aes(x = GY, y = FLW_DAYS)) + 
+  geom_jitter() + 
+  geom_smooth(method = 'lm', color = "#10342d") + 
+  theme_minimal() + 
+  theme(text = element_text(size = 20))
+
+model_GY_2 <- lm(FLW_DAYS ~ GY + PH_R8, data = trial_4)
+summary(model_GY_2)
+
+model_GY_3 <- lm(FLW_DAYS ~ GY + PL_EMERG_COUNT, data = trial_4)
+summary(model_GY_3)
+
+model_GY_3 <- lm(FLW_DAYS ~ GY + PL_EMERG_COUNT+PH_R8, data = trial_4)
+summary(model_GY_3) 
+```
+This trial the GY does not explain the response variable.
+
+### PH
+```{r}
+# X matrix - PH_R8, GY and PL_EMERG_COUNT and interaction
+X <- model.matrix(~ PH_R8, data = trial_4)
+
+#Beta hat
+X_line_X <- crossprod(X)
+X_line_X_inv <- solve(X_line_X)
+X_line_Y <- crossprod(X, Y_flw)
+beta_hat <- X_line_X_inv %*% X_line_Y; beta_hat
+model_PH <- lm(FLW_DAYS ~ PH_R8, data = trial_4)
+summary(model_PH)
+
+library(ggplot2)
+ggplot(data = trial_4, aes(x = PH_R8, y = FLW_DAYS)) + 
+  geom_jitter() + 
+  geom_smooth(method = 'lm', color = "#10342d") + 
+  theme_minimal() + 
+  theme(text = element_text(size = 20))
+
+model_PH_1 <- lm(FLW_DAYS ~ PH_R8 + GY, data = trial_4)
+summary(model_PH_1)
+
+model_PH_2 <- lm(FLW_DAYS ~ PH_R8 + GY + PL_EMERG_COUNT, data = trial_4)
+summary(model_PH_2)
+
+model_PH_3 <- lm(FLW_DAYS ~ PH_R8 + GY*PL_EMERG_COUNT, data = trial_4)
+summary(model_PH_3)
+
+model_PH_4 <- lm(FLW_DAYS ~ PH_R8*GY + GY*PL_EMERG_COUNT, data = trial_4)
+summary(model_PH_4)
+```
+This trial may have something off because it is the second variable that does not have anything significant.
+
+### PL_EMERG_COUNT
+```{r}
+# X matrix - PH_R8, GY and PL_EMERG_COUNT and interaction
+X <- model.matrix(~ PL_EMERG_COUNT, data = trial_4)
+
+#Beta hat
+X_line_X <- crossprod(X)
+X_line_X_inv <- solve(X_line_X)
+X_line_Y <- crossprod(X, Y_flw)
+beta_hat <- X_line_X_inv %*% X_line_Y; beta_hat
+model_PL <- lm(FLW_DAYS ~ PL_EMERG_COUNT, data = trial_4)
+summary(model_PL)
+
+library(ggplot2)
+ggplot(data = trial_4, aes(x = PL_EMERG_COUNT, y = FLW_DAYS)) + 
+  geom_jitter() + 
+  geom_smooth(method = 'lm', color = "#10342d") + 
+  theme_minimal() + 
+  theme(text = element_text(size = 20))
+
+model_PL_1 <- lm(FLW_DAYS ~ PL_EMERG_COUNT + GY, data = trial_4)
+summary(model_PL_1)
+
+model_PL_2 <- lm(FLW_DAYS ~ PL_EMERG_COUNT + GY + PH_R8 , data = trial_4)
+summary(model_PL_2)
+```
+
+The 4th trial have some problem maybe, because neither combinations of variables nor "alone"variables could be significant to built a regression model.
