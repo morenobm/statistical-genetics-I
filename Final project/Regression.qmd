@@ -34,7 +34,7 @@ knitr::opts_chunk$set(
 
 # Introduction
 
-This report presents the linear regression  made in a data set of a soybean breeding program in **Zambia**, exploring **four trials**, **four key soybean traits** and **one climate variable**. The main objectives are to create linear regressions to explore the relationship between the main traits ans the climatic variable. First, we explore the relationship among the different traits in all trials, then in each trial.  In the following section, we present the relationship between the traits and one climate variable in a linear regression.
+This report presents the linear regression  made in a data set of a soybean breeding program in **Zambia**, exploring **four trials**, **four key soybean traits** and **one climate variable**. The main objectives are to create linear regressions to explore the relationship between the main traits ans the climatic variable. First, we explore the relationship among the different traits in all trials using the matricial form and using the `lm()` function. In the next section, we perform the linear regression on each trial, following the same procedure as before. In the following section, we present the relationship between the traits and one climate variable in a linear regression.
 
 ```{r}
 #| label: trials-data
@@ -64,7 +64,7 @@ selected_data <- data |>
     loc == "L0133" & YEAR == "2023" ~ 2,
     loc == "L074"  & YEAR == "2023" ~ 3,
     loc == "L0134" & YEAR == "2023" ~ 4)) |> 
-  mutate(trial = as.factor(trial))
+  mutate(trial = as.factor(trial)) |> na.omit()
 
 # Trial 1 - Local "L0118" / Year "2023" 
 trial_1 <- selected_data |> filter(trial == "1") |> na.omit()
@@ -980,7 +980,7 @@ p1_plot <- ggplot(trial_1, aes(x = FLW_DAYS, y = GY)) +
   labs(title = "Trial 1: L0118", x = "FLW_DAYS", y = "GY (kg/ha)") +
   theme_bw()
 
-p2_plot <- ggplot(trial_2, aes(x = FLW_DAYS, y = GY)) +
+p2_plot <- ggplot(trial_2_clean, aes(x = FLW_DAYS, y = GY)) +
   geom_point(color = "forestgreen", alpha = 0.6) +
   geom_smooth(method = "lm", color = "red", se = TRUE) +
   annotate("text", x = -Inf, y = Inf, label = get_metrics(model_GY2), 
@@ -988,7 +988,7 @@ p2_plot <- ggplot(trial_2, aes(x = FLW_DAYS, y = GY)) +
   labs(title = "Trial 2: L0133", x = "FLW_DAYS", y = "GY (kg/ha)") +
   theme_bw()
 
-p3_plot <- ggplot(trial_3, aes(x = FLW_DAYS, y = GY)) +
+p3_plot <- ggplot(trial_3_clean, aes(x = FLW_DAYS, y = GY)) +
   geom_point(color = "darkorange", alpha = 0.6) +
   geom_smooth(method = "lm", color = "red", se = TRUE) +
   annotate("text", x = -Inf, y = Inf, label = get_metrics(model_GY3), 
@@ -1018,10 +1018,10 @@ print(painel_flw)
 
 ```{r}
 #Response variable
-Y_flw <- as.matrix(selected_data$GY)
-
-# X matrix - only GY
-X = model.matrix(~selected_data[,"FLW_DAYS"])
+data_across <- selected_data |> filter(FLW_DAYS > 37) |> na.omit()
+Y_flw <- data_across[,10]
+# X matrix 
+X <- model.matrix(~ FLW_DAYS, data = data_across)
 
 #Beta hat
 X_line_X <- crossprod(X)
@@ -1029,14 +1029,31 @@ X_line_X_inv <- solve(X_line_X)
 X_line_Y <- crossprod(X, Y_flw)
 beta_hat <- X_line_X_inv %*% X_line_Y
 
-model_GY <- lm(GY ~ FLW_DAYS, data = selected_data)
+model_GY <- lm(GY ~ FLW_DAYS, data = data_across)
 summary(model_GY);beta_hat
+
+r2_all_FLW <- round(summary(model_GY)$r.squared, 3)
+
+```
+```{r}
+ggplot(data_across, aes(x = FLW_DAYS, y = GY)) +
+  geom_point(alpha = 0.3, color = "gray40") +
+  geom_smooth(method = "lm", color = "green", fill = "skyblue", size = 1.2) +
+  annotate("label", x = -Inf, y = Inf, 
+           label = paste0("y = ", round(beta_hat[2], 2), "x + ", round(beta_hat[1], 2), 
+                          "\nR² = ", r2_all_FLW, "\np = ", round(summary(model_GY)$coefficients[2,4], 3)),
+           hjust = -0.1, vjust = 1.2, color = "forestgreen", fontface = "bold", size = 5) +
+  labs(title = "Across-Trials Overview: Days to flowering (Zambia 2023)", 
+       subtitle = "Consolidated relationship between Days to flowering and Grain Yield",
+       x = "Days to flowering - FLW_DAYS (Count)", 
+       y = "Grain Yield - GY (kg/ha)") +
+  theme_minimal()
 
 ```
 
-
-
 # Climatic variable - Precipitation
+
+The data set available had multiple climatic variables, it was chosen **precipitation**, due its importance and influence on the photosynthetic system and carbohydrate production chosen trait.  
 
 ```{r}
 library(dplyr)
@@ -1054,12 +1071,398 @@ filtered_climate_df <- climate_df |>
   select(env, PRECTOTCORR) |> 
   distinct()
 
-# Colocando a variável de precipitação diária média nos dados selecionados
-selected_data <- selected_data |> 
+# Mean daily precipitation added to the main dataset
+selected_data_climate <- selected_data |> 
   left_join(filtered_climate_df, by = "env")
+```
+```{r}
+trial_1_climate <- selected_data_climate |> filter(trial==1) |> na.omit()
+y_gy <- trial_1_climate$GY
+
+# X matrix 
+X <- as.matrix(cbind(Intercept = 1, 
+                     PH_R8 = trial_1_climate$PH_R8, 
+                     PRECTOTCORR = trial_1_climate$PRECTOTCORR))
+
+#Beta hat
+print("1. Matrix (X'X) for Trial 1:")
+X_line_X <- crossprod(X)
+print(round(X_line_X , 2))
+X_line_X_inv <- solve(X_line_X)
+X_line_Y <- crossprod(X, y_gy)
+print("2. Manual Coefficients (beta):")
+beta_hat <- X_line_X_inv %*% X_line_Y
+print(beta_hat)
+
+cat("--- Validation with lm() ---\n")
+model_GY1 <- lm(GY ~ PH_R8, data = trial_1_climate)
+coef(summary(model_GY1))[, "Estimate"] 
 
 # Regressao com lm
-anova(lm(GY ~ PRECTOTCORR, data = selected_data))
+summary(lm(GY ~ PRECTOTCORR, data = selected_data_climate))
 ```
 
 A precipitação diária média foi significativa para explicar a produtividade dos genótipos nos diferentes ambientes, quando este fator é analisado isoladamente no modelo. Tal resultado é esperado devido a importância desse fator para o desenvolvimento das culturas.
+
+
+## GY ~ PH_R8 + PRECIP
+
+### Individual trials
+
+```{r}
+# --- Trial 1: L0118 ---
+cat("\n\n=== MATRICES FOR TRIAL 1 (L0118) ===\n")
+df_T1 <- trial_1 %>% na.omit() #O na.omit() garante que apenas linhas completas entrem no cálculo matricial, os NA estavam "quebrando" a matriz
+
+y_1 <- as.matrix(df_T1$GY)
+X_1 <- as.matrix(cbind(Intercept = 1, PH_R8 = df_T1$PH_R8))
+
+# Álgebra Manual
+beta_1 <- solve(t(X_1) %*% X_1) %*% t(X_1) %*% y_1
+print("1. Matrix (X'X) for Trial 1:")
+print(round(t(X_1) %*% X_1, 2))
+print("2. Manual Coefficients (beta hat):")
+print(beta_1)
+
+# Prova Real
+cat("--- Validation with lm() ---\n")
+print(coef(lm(GY ~ PH_R8, data = df_T1)))
+mod1 <- lm(GY ~ PH_R8, data = df_T1)
+
+
+# --- Trial 2: L0133 ---
+cat("\n\n=== MATRICES FOR TRIAL 2 (L0133) ===\n")
+df_T2 <- trial_2 %>% na.omit()
+
+y_2 <- as.matrix(df_T2$GY)
+X_2 <- as.matrix(cbind(Intercept = 1, PH_R8 = df_T2$PH_R8))
+
+beta_2 <- solve(t(X_2) %*% X_2) %*% t(X_2) %*% y_2
+print("1. Matrix (X'X) for Trial 2:")
+print(round(t(X_2) %*% X_2, 2))
+print("2. Manual Coefficients (beta hat):")
+print(beta_2)
+
+cat("--- Validation with lm() ---\n")
+print(coef(lm(GY ~ PH_R8, data = df_T2)))
+mod2 <- lm(GY ~ PH_R8, data = df_T2) 
+
+
+# --- Trial 3: L074 ---
+cat("\n\n=== MATRICES FOR TRIAL 3 (L074) ===\n")
+df_T3 <- trial_3 %>% na.omit()
+
+y_3 <- as.matrix(df_T3$GY)
+X_3 <- as.matrix(cbind(Intercept = 1, PH_R8 = df_T3$PH_R8))
+
+beta_3 <- solve(t(X_3) %*% X_3) %*% t(X_3) %*% y_3
+print("1. Matrix (X'X) for Trial 3:")
+print(round(t(X_3) %*% X_3, 2))
+print("2. Manual Coefficients (beta hat):")
+print(beta_3)
+
+cat("--- Validation with lm() ---\n")
+print(coef(lm(GY ~ PH_R8, data = df_T3)))
+mod3 <- lm(GY ~ PH_R8, data = df_T3)
+
+
+# --- Trial 4: L0134 ---
+cat("\n\n=== MATRICES FOR TRIAL 4 (L0134) ===\n")
+df_T4 <- trial_4 %>% na.omit()
+
+y_4 <- as.matrix(df_T4$GY)
+X_4 <- as.matrix(cbind(Intercept = 1, PH_R8 = df_T4$PH_R8))
+
+beta_4 <- solve(t(X_4) %*% X_4) %*% t(X_4) %*% y_4
+print("1. Matrix (X'X) for Trial 4:")
+print(round(t(X_4) %*% X_4, 2))
+print("2. Manual Coefficients (beta hat):")
+print(beta_4)
+
+cat("--- Validation with lm() ---\n")
+print(coef(lm(GY ~ PH_R8, data = df_T4)))
+mod4 <- lm(GY ~ PH_R8, data = df_T4)
+```
+
+### Across trials
+
+After dissecting the regression models for each individual trial, we conclude this analysis with a consolidated overview of all environments. This "Across-Trials" perspective is fundamental to understanding the general trend of soybean performance in Zambia during the 2023 season. By aggregating the data we can estimate a global slope that represents the average biological response of the crop to variations in plant height ($PH\_R8$). This final step serves as a validation of our initial findings, the goal here is to measure the statistical power of plant height as a primary driver of grain yield on a national scale. Through the same manual matrix algebra and Ordinary Least Squares (OLS) estimation, we aim to confirm if the positive correlation observed in the multiple regression
+
+```{r}
+
+df_across <- selected_data |> filter(trial == "1" & PH_R8 <200) |> na.omit()
+
+cat("\n--- ACROSS-TRIALS MATRIX CALCULATION ---\n")
+y_total <- as.matrix(df_across$GY)
+X_total <- as.matrix(cbind(Intercept = 1, PH_R8 = df_across$PH_R8))
+
+# Cálculo matricial
+beta_total <- solve(t(X_total) %*% X_total, t(X_total) %*% y_total)
+print(beta_total)
+
+mod_total <- lm(GY ~ PH_R8, data = df_across)
+r2_all <- round(summary(mod_total)$r.squared, 3)
+
+ggplot(df_across, aes(x = PH_R8, y = GY)) +
+  geom_point(alpha = 0.3, color = "gray40") +
+  geom_smooth(method = "lm", color = "red", fill = "indianred1", size = 1.2) +
+  annotate("label", x = -Inf, y = Inf, 
+           label = paste0("y = ", round(beta_total[2], 2), "x + ", round(beta_total[1], 2), 
+                          "\nR² = ", r2_all, "\np < 0.001"),
+           hjust = -0.1, vjust = 1.2, color = "darkred", fontface = "bold", size = 5) +
+  labs(title = "Across-Trials Overview (Zambia 2023)", 
+       subtitle = "Consolidated relationship between Plant Height and Yield",
+       x = "Plant Height - PH_R8 (cm)", 
+       y = "Grain Yield - GY (kg/ha)") +
+  theme_minimal()
+```
+
+## GY ~ PL_EMERG_COUNT + PRECIP
+
+### Individual trials
+
+```{r}
+# SIMPLE LINEAR REGRESSION BY TRIAL: PL_EMERG_COUNT
+
+# --- Trial 1: L0118 ---
+cat("\n\n=== MATRICES FOR TRIAL 1 (L0118) - PL_EMERG_COUNT ===\n")
+df_T1_PL <- trial_1 %>% na.omit()
+
+y_1_PL <- as.matrix(df_T1_PL$GY)
+X_1_PL <- as.matrix(cbind(Intercept = 1, PL_EMERG = df_T1_PL$PL_EMERG_COUNT))
+
+# Álgebra Manual
+beta_1_PL <- solve(t(X_1_PL) %*% X_1_PL) %*% t(X_1_PL) %*% y_1_PL
+print("1. Matrix (X'X) for Trial 1:")
+print(round(t(X_1_PL) %*% X_1_PL, 2))
+print("2. Manual Coefficients (beta):")
+print(beta_1_PL)
+
+# Conferindo...
+cat("--- Validation with lm() ---\n")
+print(coef(lm(GY ~ PL_EMERG_COUNT, data = df_T1_PL)))
+
+
+# --- Trial 2: L0133 ---
+cat("\n\n=== MATRICES FOR TRIAL 2 (L0133) - PL_EMERG_COUNT ===\n")
+df_T2_PL <- trial_2 %>% na.omit()
+
+y_2_PL <- as.matrix(df_T2_PL$GY)
+X_2_PL <- as.matrix(cbind(Intercept = 1, PL_EMERG = df_T2_PL$PL_EMERG_COUNT))
+
+beta_2_PL <- solve(t(X_2_PL) %*% X_2_PL) %*% t(X_2_PL) %*% y_2_PL
+print("1. Matrix (X'X) for Trial 2:")
+print(round(t(X_2_PL) %*% X_2_PL, 2))
+print("2. Manual Coefficients (beta):")
+print(beta_2_PL)
+
+cat("--- Validation with lm() ---\n")
+print(coef(lm(GY ~ PL_EMERG_COUNT, data = df_T2_PL)))
+
+
+# --- Trial 3: L074 ---
+cat("\n\n=== MATRICES FOR TRIAL 3 (L074) - PL_EMERG_COUNT ===\n")
+df_T3_PL <- trial_3 %>% na.omit()
+
+y_3_PL <- as.matrix(df_T3_PL$GY)
+X_3_PL <- as.matrix(cbind(Intercept = 1, PL_EMERG = df_T3_PL$PL_EMERG_COUNT))
+
+beta_3_PL <- solve(t(X_3_PL) %*% X_3_PL) %*% t(X_3_PL) %*% y_3_PL
+print("1. Matrix (X'X) for Trial 3:")
+print(round(t(X_3_PL) %*% X_3_PL, 2))
+print("2. Manual Coefficients (beta):")
+print(beta_3_PL)
+
+cat("--- Validation with lm() ---\n")
+print(coef(lm(GY ~ PL_EMERG_COUNT, data = df_T3_PL)))
+
+
+# --- Trial 4: L0134 ---
+cat("\n\n=== MATRICES FOR TRIAL 4 (L0134) - PL_EMERG_COUNT ===\n")
+df_T4_PL <- trial_4 %>% na.omit()
+
+y_4_PL <- as.matrix(df_T4_PL$GY)
+X_4_PL <- as.matrix(cbind(Intercept = 1, PL_EMERG = df_T4_PL$PL_EMERG_COUNT))
+
+beta_4_PL <- solve(t(X_4_PL) %*% X_4_PL) %*% t(X_4_PL) %*% y_4_PL
+print("1. Matrix (X'X) for Trial 4:")
+print(round(t(X_4_PL) %*% X_4_PL, 2))
+print("2. Manual Coefficients (beta):")
+print(beta_4_PL)
+
+cat("--- Validation with lm() ---\n")
+print(coef(lm(GY ~ PL_EMERG_COUNT, data = df_T4_PL)))
+
+```
+
+### Across trials
+
+```{r}
+df_across_PL <- selected_data %>% 
+  na.omit()
+
+cat("\n--- ACROSS-TRIALS MATRIX CALCULATION (PLANT EMERGENCE) ---\n")
+y_total_PL <- as.matrix(df_across_PL$GY)
+X_total_PL <- as.matrix(cbind(Intercept = 1, PL = df_across_PL$PL_EMERG_COUNT))
+
+# Matrix Calculation
+beta_total_PL <- solve(t(X_total_PL) %*% X_total_PL, t(X_total_PL) %*% y_total_PL)
+print(beta_total_PL)
+
+mod_total_PL <- lm(GY ~ PL_EMERG_COUNT, data = df_across_PL)
+r2_all_PL <- round(summary(mod_total_PL)$r.squared, 3)
+
+# Visualizing Across-Trials for PL_EMERG_COUNT
+ggplot(df_across_PL, aes(x = PL_EMERG_COUNT, y = GY)) +
+  geom_point(alpha = 0.3, color = "gray40") +
+  geom_smooth(method = "lm", color = "blue", fill = "skyblue", size = 1.2) +
+  annotate("label", x = -Inf, y = Inf, 
+           label = paste0("y = ", round(beta_total_PL[2], 2), "x + ", round(beta_total_PL[1], 2), 
+                          "\nR² = ", r2_all_PL, "\np = ", round(summary(mod_total_PL)$coefficients[2,4], 3)),
+           hjust = -0.1, vjust = 1.2, color = "darkblue", fontface = "bold", size = 5) +
+  labs(title = "Across-Trials Overview: Plant Emergence (Zambia 2023)", 
+       subtitle = "Consolidated relationship between Emergence Count and Yield",
+       x = "Plants Emerged (Count)", 
+       y = "Grain Yield - GY (kg/ha)") +
+  theme_minimal()
+
+```
+
+## GY ~ FLW_DAYS + PRECIP
+
+### Individual trials
+
+```{r}
+cat("\n\n=== MATRICES FOR TRIAL 1 (L0118) ===\n")
+#Trial 1 - L0118
+trial_1 <- trial_1 |> na.omit()
+y_gy <- trial_1[,10]
+
+# X matrix - FLW_DAYS
+X <- model.matrix(~ FLW_DAYS, data = trial_1)
+
+#Beta hat
+print("1. Matrix (X'X) for Trial 1:")
+X_line_X <- crossprod(X)
+print(round(X_line_X , 2))
+X_line_X_inv <- solve(X_line_X)
+X_line_Y <- crossprod(X, y_gy)
+print("2. Manual Coefficients (beta):")
+beta_hat <- X_line_X_inv %*% X_line_Y
+print(beta_hat)
+
+cat("--- Validation with lm() ---\n")
+model_GY1 <- lm(GY ~ FLW_DAYS, data = trial_1)
+coef(summary(model_GY1))[, "Estimate"] 
+
+# --- Trial 2: L0133 ---
+cat("\n\n=== MATRICES FOR TRIAL 2 (L0133) - FLW_DAYS ===\n")
+#Trial 2 - L0133
+trial_2_clean <- trial_2 |> filter(FLW_DAYS>40)
+y_gy <- as.matrix(trial_2_clean[,10])
+
+# X matrix - FLW_DAYS
+X <- model.matrix(~ FLW_DAYS, data = trial_2_clean)
+
+#Beta hat
+print("1. Matrix (X'X) for Trial 1:")
+X_line_X <- crossprod(X)
+print(round(X_line_X , 2))
+X_line_X_inv <- solve(X_line_X)
+X_line_Y <- crossprod(X, y_gy)
+beta_hat <- X_line_X_inv %*% X_line_Y
+print("2. Manual Coefficients (beta hat):")
+print(beta_hat)
+
+cat("--- Validation with lm() ---\n")
+model_GY2 <- lm(GY ~ FLW_DAYS, data = trial_2_clean)
+coef(summary(model_GY2))[, "Estimate"] 
+
+# --- Trial 3: L074 ---
+cat("\n\n=== MATRICES FOR TRIAL 3 (L074) - FLW_DAYS ===\n")
+#Trial 3 - L0133
+trial_3_clean <- trial_2 |> filter(FLW_DAYS>40)
+y_gy <- as.matrix(trial_3_clean[,10])
+
+# X matrix - FLW_DAYS
+X <- model.matrix(~ FLW_DAYS, data = trial_3_clean)
+
+#Beta hat
+print("1. Matrix (X'X) for Trial 3:")
+X_line_X <- crossprod(X)
+print(round(X_line_X , 2))
+X_line_X_inv <- solve(X_line_X)
+X_line_Y <- crossprod(X, y_gy)
+beta_hat <- X_line_X_inv %*% X_line_Y
+print("2. Manual Coefficients (beta hat):")
+print(beta_hat)
+
+cat("--- Validation with lm() ---\n")
+model_GY3 <- lm(GY ~ FLW_DAYS, data = trial_3_clean)
+coef(summary(model_GY3))[, "Estimate"] 
+
+# --- Trial 4: L0134 ---
+cat("\n\n=== MATRICES FOR TRIAL 4 (L0134) - FLW_DAYS ===\n")
+
+#Trial 4 - L0133
+y_gy <- as.matrix(trial_4[,10])
+
+# X matrix - FLW_DAYS
+X <- model.matrix(~ FLW_DAYS, data = trial_4)
+
+#Beta hat
+print("1. Matrix (X'X) for Trial 4:")
+X_line_X <- crossprod(X)
+print(round(X_line_X , 2))
+X_line_X_inv <- solve(X_line_X)
+X_line_Y <- crossprod(X, y_gy)
+beta_hat <- X_line_X_inv %*% X_line_Y
+print("2. Manual Coefficients (beta hat):")
+print(beta_hat)
+
+cat("--- Validation with lm() ---\n")
+model_GY4 <- lm(GY ~ FLW_DAYS, data = trial_4)
+coef(summary(model_GY4))[, "Estimate"] 
+```
+
+### Across trials
+
+```{r}
+#Response variable
+data_across <- selected_data |> filter(FLW_DAYS > 37) |> na.omit()
+Y_flw <- data_across[,10]
+# X matrix 
+X <- model.matrix(~ FLW_DAYS, data = data_across)
+
+#Beta hat
+X_line_X <- crossprod(X)
+X_line_X_inv <- solve(X_line_X)
+X_line_Y <- crossprod(X, Y_flw)
+beta_hat <- X_line_X_inv %*% X_line_Y
+
+model_GY <- lm(GY ~ FLW_DAYS, data = data_across)
+summary(model_GY);beta_hat
+
+r2_all_FLW <- round(summary(model_GY)$r.squared, 3)
+
+```
+
+```{r}
+ggplot(data_across, aes(x = FLW_DAYS, y = GY)) +
+  geom_point(alpha = 0.3, color = "gray40") +
+  geom_smooth(method = "lm", color = "green", fill = "skyblue", size = 1.2) +
+  annotate("label", x = -Inf, y = Inf, 
+           label = paste0("y = ", round(beta_hat[2], 2), "x + ", round(beta_hat[1], 2), 
+                          "\nR² = ", r2_all_FLW, "\np = ", round(summary(model_GY)$coefficients[2,4], 3)),
+           hjust = -0.1, vjust = 1.2, color = "forestgreen", fontface = "bold", size = 5) +
+  labs(title = "Across-Trials Overview: Days to flowering (Zambia 2023)", 
+       subtitle = "Consolidated relationship between Days to flowering and Grain Yield",
+       x = "Days to flowering - FLW_DAYS (Count)", 
+       y = "Grain Yield - GY (kg/ha)") +
+  theme_minimal()
+
+```
+
+
+
+
