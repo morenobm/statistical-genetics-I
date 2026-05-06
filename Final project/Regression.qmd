@@ -864,7 +864,12 @@ The across-trials analysis for PL_EMERG_COUNT reveals a non-significant relation
 
 # SIMPLE LINEAR REGRESSION BY TRIAL - Days to flowering
 ```{r}
-#Response variable
+selected_data <- selected_data |> 
+  mutate(PH_R8 = ifelse(PH_R8 > 200, NA, PH_R8)) |> 
+  mutate(across(all_of(traits),~ if_else(gen == "G216" & env == "E0282", NA_real_ ,.))) |> 
+  mutate(FLW_DAYS = ifelse(FLW_DAYS == 0, NA, FLW_DAYS))
+
+#Response variable = Days to flowering
 Y_flw <- as.matrix(selected_data$FLW_DAYS)
 
 # X matrix - only GY
@@ -879,28 +884,14 @@ beta_hat <- X_line_X_inv %*% X_line_Y
 model_GY <- lm(FLW_DAYS ~ GY, data = selected_data)
 summary(model_GY);beta_hat
 
-library(plotly)
 
-plot_ly(selected_data, 
-        x = ~GY, 
-        y = ~PH_R8, 
-        z = ~FLW_DAYS, 
-        type = "scatter3d", 
-        mode = "markers") %>%
-  add_surface(
-    x = ~GY,
-    y = ~PH_R8,
-    z = ~matrix(predict(model_GY_2), nrow = length(unique(selected_data$GY)))
-  )
-
-library(ggplot2)
-ggplot(data = selected_data, aes(x = GY, y = FLW_DAYS)) + 
-  geom_point(color = "purple", alpha = 0.6) +
-  geom_smooth(method = "lm", color = "red", se = TRUE) +
-  annotate("text", x = -Inf, y = Inf, label = get_metrics(model_GY), 
-           hjust = -0.2, vjust = 1.5, color = "darkred", fontface = "bold") +
-  labs(title = "All Trials", x = "GY (kg/ha)", y = "FLW_DAYS") +
-  theme_bw()
+p1_flw <- ggplot(data = selected_data, aes(x = GY, y = FLW_DAYS)) + 
+            geom_point(color = "purple", alpha = 0.6) +
+            geom_smooth(method = "lm", color = "red", se = TRUE) +
+            annotate("text", x = -Inf, y = Inf, label = get_metrics(model_GY), 
+              hjust = -0.2, vjust = 1.5, color = "darkred", fontface = "bold") +
+            labs(title = "All Trials", x = "GY (kg/ha)", y = "FLW_DAYS") +
+            theme_bw()
 
 # X matrix - GY and PH_R8
 X = model.matrix(~GY + PH_R8, data = selected_data)
@@ -1515,3 +1506,31 @@ summary(model_PL_2)
 ```
 
 The 4th trial have some problem maybe, because neither combinations of variables nor "alone"variables could be significant to built a regression model.
+
+# Climatic variable - Rain
+
+```{r}
+library(dplyr)
+library(lubridate)
+
+climate_df <- read.csv("https://raw.githubusercontent.com/mauricioaraujj/Pan_African_Trials_Network/main/data/Covamb.csv", sep = ";")
+
+# LO118 in 2023 - E0278 
+# LO133 in 2023 - E0279
+# LO134 in 2023 - E0282
+# LO74 in 2023 - E0283
+
+filtered_climate_df <- climate_df |> 
+  filter(env %in% c("E0278", "E0279", "E0282", "E0283")) |> 
+  select(env, PRECTOTCORR) |> 
+  distinct()
+
+# Colocando a variável de precipitação diária média nos dados selecionados
+selected_data <- selected_data |> 
+  left_join(filtered_climate_df, by = "env")
+
+# Regressao com lm
+anova(lm(GY ~ PRECTOTCORR, data = selected_data))
+```
+
+A precipitação diária média foi significativa para explicar a produtividade dos genótipos nos diferentes ambientes, quando este fator é analisado isoladamente no modelo. Tal resultado é esperado devido a importância desse fator para o desenvolvimento das culturas.
