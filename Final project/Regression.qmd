@@ -331,11 +331,11 @@ pvalor_1 <- pf(F_calculado_1, gl_reg_1, gl_res_1, lower.tail = FALSE)
 # Model 1 - ANOVA Table
 tabela_anova <- data.frame(
   "Variation Causes" = c("Regression", "Residuals"),
-  SQ = c(round(SQ_reg_1, digits = 3),round(SQ_res_1, digits =3)),
-  gl = c(gl_reg_1,gl_res_1),
-  QM = c(round(QM_reg_1,digits=3), round(QM_res_1, digits = 3)),
+  SS = c(round(SQ_reg_1, digits = 3),round(SQ_res_1, digits =3)),
+  df = c(gl_reg_1,gl_res_1),
+  MS = c(round(QM_reg_1,digits=3), round(QM_res_1, digits = 3)),
   Fcalc = c(round(F_calculado_1, digits = 3), ""), 
-  Pvalor = c(pvalor_1,""), check.names = FALSE
+  Pvalue = c(pvalor_1,""), check.names = FALSE
 )
 kable(tabela_anova, align = c("l", "r", "r", "r","r"))
 ```
@@ -665,7 +665,9 @@ In conclusion, the disparity between the global regression model and the individ
 
 After dissecting the regression models for each individual trial, we conclude this analysis with a consolidated overview of all environments. This "Across-Trials" perspective is fundamental to understanding the general trend of soybean performance in Zambia during the 2023 season. By aggregating the data we can estimate a global slope that represents the average biological response of the crop to variations in plant height ($PH\_R8$). This final step serves as a validation of our initial findings, the goal here is to measure the statistical power of plant height as a primary driver of grain yield on a national scale. Through the same manual matrix algebra and Ordinary Least Squares (OLS) estimation, we aim to confirm if the positive correlation observed in the multiple regression
 
-```{r}
+```{r} 
+#| label: fig-regressao-altura-cross
+#| fig-cap: Relationship between soybean grain yield (kg/ha) and plant height at maturity (cm) in Zambia. Regression equations and coefficients of determination ($R^2$) are displayed for each trial.
 
 df_across <- selected_data |> filter(trial == "1" & PH_R8 <200) |> na.omit()
 
@@ -841,6 +843,9 @@ To visualize the impact of plant density on yield across different environments,
 ### Across trials
 
 ```{r}
+#| label: fig-regressao-plant
+#| fig-cap: Relationship between soybean grain yield (kg/ha) and plant emergence count across four trials in Zambia. Regression equations and coefficients of determination ($R^2$) are displayed for each trial.
+#
 df_across_PL <- selected_data %>% 
   na.omit()
 
@@ -1044,6 +1049,9 @@ r2_all_FLW <- round(summary(model_GY)$r.squared, 3)
 ```
 
 ```{r}
+#| label: fig-regressao-flw
+#| fig-cap: Relationship between soybean grain yield (kg/ha) and days to flowering across four trials in Zambia. Regression equations and coefficients of determination ($R^2$) are displayed for each trial.
+
 ggplot(data_across, aes(x = FLW_DAYS, y = GY)) +
   geom_point(alpha = 0.3, color = "gray40") +
   geom_smooth(method = "lm", color = "green", fill = "skyblue", size = 1.2) +
@@ -1094,6 +1102,8 @@ The mean daily precipitation was significant in explaining the grain yield of th
 ### Across trials
 
 ```{r}
+#| label: fig-regressao-altura-precip
+#| fig-cap: Relationship between soybean grain yield (kg/ha), plant height and mean daily precipitation at maturity (cm) in Zambia. Regression equations and coefficients of determination ($R^2$) are displayed for each trial.
 cat("\n--- ACROSS-TRIALS MATRIX CALCULATION PLANT HEIGHT ---\n")
 y_total <- as.matrix(selected_data_climate$GY)
 X_total <- as.matrix(cbind(Intercept = 1, 
@@ -1129,6 +1139,8 @@ The inclusion of the climatic variable drastically improved the linear regressio
 ### Across trials
 
 ```{r}
+#| label: fig-regressao-emerg-precip
+#| fig-cap: Relationship between soybean grain yield (kg/ha), plant emergence count and mean daily precipitation at maturity (cm) in Zambia. Regression equations and coefficients of determination ($R^2$) are displayed for each trial.
 cat("\n--- ACROSS-TRIALS MATRIX CALCULATION (PLANT EMERGENCE) ---\n")
 y_total_PL <- as.matrix(selected_data_climate$GY)
 X_total_PL <- as.matrix(cbind(Intercept = 1, 
@@ -1164,6 +1176,9 @@ ggplot(selected_data_climate, aes(x = predicted_pl, y = GY)) +
 ### Across trials
 
 ```{r}
+#| label: fig-regressao-flw-precip
+#| fig-cap: Relationship between soybean grain yield (kg/ha), days to flowering and mean daily precipitation at maturity (cm) in Zambia. Regression equations and coefficients of determination ($R^2$) are displayed for each trial.
+
 cat("\n--- ACROSS-TRIALS MATRIX CALCULATION (DAYS TO FLOWERING) ---\n")
 y_total_flw <- as.matrix(selected_data_climate$GY)
 X_total_flw <- as.matrix(cbind(Intercept = 1, 
