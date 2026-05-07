@@ -83,7 +83,6 @@ trial_4 <- selected_data |> filter(trial == "4") |> na.omit()
 genotypes_4 <- trial_4$gen
 ```
 
-
 # Multiple Regression
 
 Now, a multiple regression model with the 3 independent variables will be considered: $y_i =\beta_0 + \beta_1x_{i1} + \beta_2x_{i2} + \beta_3x_{i3} + \varepsilon_{i}$:
@@ -128,6 +127,7 @@ $$
 $$
 
 The estimated values are:
+
 ```{r}
 # Removing outliers and other variables
 selected_data1 <- selected_data |> 
@@ -225,8 +225,7 @@ anova(modelo_nulo, modelo_completo)
 
 The results are the same. We conclude that at least one of the variables are important to explain grain yield, considering the model explained above.
 
-Now, each variable will be tested separately, in the presence of the other variables in the model. The hypothesis are $H_0: \beta_i = 0$ e $H_a : \beta_i \ne 0$, for i = 1, 2, 3, and the test used is: $H_0 : C\underset{\sim}{\beta} = 0$ . 
-
+Now, each variable will be tested separately, in the presence of the other variables in the model. The hypothesis are $H_0: \beta_i = 0$ e $H_a : \beta_i \ne 0$, for i = 1, 2, 3, and the test used is: $H_0 : C\underset{\sim}{\beta} = 0$ .
 
 $$
 SQ_{HIP} = (C\underset{\sim}{\hat\beta})'[C (X'X)^{-1}C']^{-1}(C\underset{\sim}{\hat\beta})
@@ -264,7 +263,6 @@ pvalor_2 <- pf(F_calculado_2, 1 , gl_res, lower.tail = FALSE)
 pvalor_3 <- pf(F_calculado_3, 1 , gl_res, lower.tail = FALSE)
 ```
 
-
 ```{r, echo=FALSE}
 # Imprimindo resultados 
 cat("calculated F - Beta1 = 0:", F_calculado_1,"\tp-value - Beta1 = 0:", pvalor_1, "\ncalculated F - Beta 2 = 0:", F_calculado_2,"\tp-value - Beta2 = 0:", pvalor_2,"\ncalculated F - Beta3 = 0:", F_calculado_3,"\tp-value - Beta3 = 0:", pvalor_3) 
@@ -280,17 +278,15 @@ Considering $\alpha_f = 0.05$ , without correcting the p-values, we **reject** t
 
 However, when doing this, the globalwise level of significance is $\alpha_f=1-(1-0.05)^3= 0.142$ . To adress this problem, Bonferroni's Correction could be used, so that $\alpha_c = 0.05 / 3= 0.016$. Now, $H_0 : \beta_2 =0$ and $H_0: \beta_3 = 0$ are **rejected**, which means that only $x_2$ - "PH_R8" and $x_3$ - "FLW_DAYS" are significant in the **full model**, when correcting the significance level.
 
-
 ## Stepwise
 
 Other method that could be used to select variables in the model is stepwise:
 
 1.  In each step is added a variable in the model (usually the one more correlated with the response variable);
 
-2.  The added variable is evaluated in the model, using a criteria such as  p-value, AIC, BIC.
+2.  The added variable is evaluated in the model, using a criteria such as p-value, AIC, BIC.
 
 3.  The full model is obtained when the addition of no remaining variable is significant
-
 
 ```{r}
 # Verifing multicolinearity
@@ -304,7 +300,6 @@ No multicolinearity is observed. The order of variable inclusion will be: $x_2 \
 Model 1: $y_i = \beta_0 + \beta_2x_{i2} + \varepsilon_i$
 
 Hip: $H_0: \beta_2 = 0$
-
 
 ```{r, results='hold'}
 # Design matrix
@@ -351,11 +346,9 @@ As this variable was significant, it will be mantained in the model.
 
 Model 2: $y_i = \beta_0 + \beta_2x_{i2} + \beta_1x_{i3} +\varepsilon_i$
 
-Hip: $H_0: \beta_3 = 0$ . 
+Hip: $H_0: \beta_3 = 0$ .
 
-If the hypothesis is rejected, we will test $H_0 : \beta_2 = 0$ , to verify if this variable remains significant after adding X3.
-We can compare both models using: 
-$$
+If the hypothesis is rejected, we will test $H_0 : \beta_2 = 0$ , to verify if this variable remains significant after adding X3. We can compare both models using: $$
 F = \frac{SQ_{REG \ (CURRENT)} - SQ_{REG \ (PREVIOUS)}}{QM_{RES\ (CURRENT)}}
 $$
 
@@ -408,7 +401,7 @@ It can be seen that $SQ(x_2 \mid x_3)$ is significant, meaning that $x_2$ is sti
 
 Model 3: $y_i = \beta_0 + \beta_5x_{i2} + \beta_1x_{i3} + \beta_2 x_{i1} +\varepsilon_i$
 
-Hip: $H_0: \beta_1 = 0$ . 
+Hip: $H_0: \beta_1 = 0$ .
 
 The tests are done as in the previous steps.
 
@@ -510,15 +503,16 @@ The final model is:
 
 $$ y_i = 4014.965 - 2.638x_{i1} + 42.728x_{i2} - 71.994x_{i3} + \varepsilon_i $$
 
-$R^2 \approx 0.41$ indicates that the model explains approximately 41% of the observed grain yield variation. Note that we are considering data from different locations, without including an effect associated with locations or the interaction of genotypes x environment. 
+$R^2 \approx 0.41$ indicates that the model explains approximately 41% of the observed grain yield variation. Note that we are considering data from different locations, without including an effect associated with locations or the interaction of genotypes x environment.
 
 Regarding the interpretation of each partial regression coefficient, as explained, they represent the **isolated effect** of that variable in the response (when the other variables are included in the model). For example, in this model, if "Plant Emergence Count (X1)" and "Plant Height (X2)" are constant, when we increase 1 day in X3 (Days to Flowering), the productivity is expected to reduce in 71,9 kg/ha, indicating that cultivars with faster cycles may be better in this environments.
 
-# Single Linear Regression by trial 
+# Single Linear Regression by trial
 
 While the across-trials multiple regression provided a comprehensive overview of the main drivers of grain yield in Zambia, it is essential to recognize that phenotypic expression is highly dependent on specific environmental conditions.
 
-## GY ~ PH_R8
+## GY \~ PH_R8
+
 In this section, we perform a **Simple Linear Regression** for each of the four locations (Trials 1 to 4) independently. The primary objective is to verify if the positive correlation between **plant height (PH_R8)** and **grain yield (GY)** observed in the global model holds true for each specific site, while also exploring the behavior of other relevant agronomic traits.
 
 To ensure mathematical transparency *(as proposed by the exercise)*, we calculate the parameters using **Manual Matrix Algebra** through the Ordinary Least Squares (OLS) estimator:
@@ -691,7 +685,7 @@ ggplot(df_across, aes(x = PH_R8, y = GY)) +
   geom_smooth(method = "lm", color = "red", fill = "indianred1", size = 1.2) +
   annotate("label", x = -Inf, y = Inf, 
            label = paste0("y = ", round(beta_total[2], 2), "x + ", round(beta_total[1], 2), 
-                          "\nR² = ", r2_all, "\np < 0.001"),
+                          "\nR² = ", r2_all),
            hjust = -0.1, vjust = 1.2, color = "darkred", fontface = "bold", size = 5) +
   labs(title = "Across-Trials Overview (Zambia 2023)", 
        subtitle = "Consolidated relationship between Plant Height and Yield",
@@ -702,7 +696,7 @@ ggplot(df_across, aes(x = PH_R8, y = GY)) +
 
 The results from the matrix calculation confirm a positive relationship, with a slope coefficient of $42.71$, aligning perfectly with our initial global multiple regression model. This indicates that, on average, every 1 cm increase in plant height corresponds to an additional $42.71$ kg/ha in yield across the country. Furthermore, the coefficient of determination ($R^2 = 0.333$) suggests that approximately 33% of the yield variation is explained solely by height, while the high statistical significance ($p < 0.001$) provides a solid foundation for breeding selections that favor taller, more vigorous genotypes under general conditions.
 
-## GY ~ PL_EMERG_COUNT
+## GY \~ PL_EMERG_COUNT
 
 Beyond vegetative growth and flowering time, the initial plant stand is a decisive factor for final grain yield. **PL_EMERG_COUNT** represents the number of plants that successfully emerged in each plot. In statistical modeling, this trait often acts as a covariate, as it accounts for variation in yield that is due to planting density rather than genetic potential alone.
 
@@ -879,7 +873,7 @@ ggplot(df_across_PL, aes(x = PL_EMERG_COUNT, y = GY)) +
 
 The across-trials analysis for PL_EMERG_COUNT reveals a non-significant relationship between plant emergence and grain yield in Zambia ($p = 0.345$). The estimated slope of $-1.18$ suggests that, on a national level, increasing the initial plant stand did not result in productivity gains during the 2023 season. With an $R^2$ of only $0.003$, the emergence count explains less than 1% of the total variation in yield when all environments are aggregated.
 
-## GY ~ FLW_DAYS
+## GY \~ FLW_DAYS
 
 In this analysis we performed the linear regression using the trait **Days to flowering** using matrix form and the `lm()` function.
 
@@ -918,7 +912,7 @@ y_gy <- as.matrix(trial_2_clean[,10])
 X <- model.matrix(~ FLW_DAYS, data = trial_2_clean)
 
 #Beta hat
-print("1. Matrix (X'X) for Trial 1:")
+print("2. Matrix (X'X) for Trial 2:")
 X_line_X <- crossprod(X)
 print(round(X_line_X , 2))
 X_line_X_inv <- solve(X_line_X)
@@ -933,8 +927,7 @@ coef(summary(model_GY2))[, "Estimate"]
 
 # --- Trial 3: L074 ---
 cat("\n\n=== MATRICES FOR TRIAL 3 (L074) - FLW_DAYS ===\n")
-#Trial 3 - L0133
-trial_3_clean <- trial_2 |> filter(FLW_DAYS>40)
+trial_3_clean <- trial_3 |> filter(FLW_DAYS>40)
 y_gy <- as.matrix(trial_3_clean[,10])
 
 # X matrix - FLW_DAYS
@@ -957,7 +950,7 @@ coef(summary(model_GY3))[, "Estimate"]
 # --- Trial 4: L0134 ---
 cat("\n\n=== MATRICES FOR TRIAL 4 (L0134) - FLW_DAYS ===\n")
 
-#Trial 4 - L0133
+#Trial 4 - L0134
 y_gy <- as.matrix(trial_4[,10])
 
 # X matrix - FLW_DAYS
@@ -1025,6 +1018,7 @@ painel_flw <- (p1_plot + p2_plot) / (p3_plot + p4_plot) +
 
 print(painel_flw)
 ```
+
 The $R^2$ values for trials 1, 2, and 3 ranged from 16% to 20%, suggesting that flowering time have an influence as predictor of GY under those climatic conditions on this locations. In contrast, trial 4 showed an $R^2$ of 0.004, demonstrating that flowering time explains almost none of the yield variability, which may suggest that other biotic or abiotic factors were more limiting in that trial.
 
 ### Across trials
@@ -1048,6 +1042,7 @@ summary(model_GY);beta_hat
 r2_all_FLW <- round(summary(model_GY)$r.squared, 3)
 
 ```
+
 ```{r}
 ggplot(data_across, aes(x = FLW_DAYS, y = GY)) +
   geom_point(alpha = 0.3, color = "gray40") +
@@ -1063,12 +1058,12 @@ ggplot(data_across, aes(x = FLW_DAYS, y = GY)) +
   theme_minimal()
 
 ```
-The negative slope remains while analyzing all trials together. Notably, the regression coefficient presents a smaller value than the single trials, indicating the mixture of environments in a single analysis can influence the accuracy. One important point to notice is the $\beta_1$ coefficient. Here it indicates a higher loss as each day longer to flower, adding one day to the cycle to flower it is lost 58.3 kg/ha in grain yield.  The graph is telling us that for each day the plants take longer to flower it is lost 48.19 kg/ha of grain yield. That indicates that in Zambia it is interesting to select genotypes with early flowering development. 
 
+The negative slope remains while analyzing all trials together. Notably, the regression coefficient presents a smaller value than the single trials, indicating the mixture of environments in a single analysis can influence the accuracy. One important point to notice is the $\beta_1$ coefficient. Here it indicates a higher loss as each day longer to flower, adding one day to the cycle to flower it is lost 58.3 kg/ha in grain yield. The graph is telling us that for each day the plants take longer to flower it is lost 48.19 kg/ha of grain yield. That indicates that in Zambia it is interesting to select genotypes with early flowering development.
 
 # Climatic variable - Precipitation
 
-The data set available had multiple climatic variables, it was chosen **precipitation**, due its importance and influence on the photosynthetic system and carbohydrate production chosen trait.  
+The data set available had multiple climatic variables, it was chosen **precipitation**, due its importance and influence on the photosynthetic system and carbohydrate production chosen trait.
 
 ```{r}
 library(dplyr)
@@ -1092,11 +1087,12 @@ selected_data_climate <- selected_data |>
   na.omit()
 ```
 
-A precipitação diária média foi significativa para explicar a produtividade dos genótipos nos diferentes ambientes, quando este fator é analisado isoladamente no modelo. Tal resultado é esperado devido a importância desse fator para o desenvolvimento das culturas.
+The mean daily precipitation was significant in explaining the grain yield of the genotypes across the different environments when this factor is analyzed independently in the model. This result is expected due to the importance of this factor for crop development
 
+## GY \~ PH_R8 + PRECIP
 
-## GY ~ PH_R8 + PRECIP
 ### Across trials
+
 ```{r}
 cat("\n--- ACROSS-TRIALS MATRIX CALCULATION PLANT HEIGHT ---\n")
 y_total <- as.matrix(selected_data_climate$GY)
@@ -1125,10 +1121,11 @@ ggplot(selected_data_climate, aes(x = predicted_ph, y = GY)) +
        y = "Grain Yield - GY (kg/ha)") +
   theme_minimal()
 ```
+
 The inclusion of the climatic variable drastically improved the linear regression model. The $R^2$ value increased from 0.02 to 0.34, significantly enhancing the model's explanatory power. Furthermore, the regression slope underwent a fundamental shift, pivoting from a negative trend to a positive correlation, which better reflects the biological relationship after accounting for environmental variance.
 
+## GY \~ PL_EMERG_COUNT + PRECIP
 
-## GY ~ PL_EMERG_COUNT + PRECIP
 ### Across trials
 
 ```{r}
@@ -1161,9 +1158,10 @@ ggplot(selected_data_climate, aes(x = predicted_pl, y = GY)) +
   theme_minimal()
 ```
 
-## GY ~ FLW_DAYS + PRECIP
+## GY \~ FLW_DAYS + PRECIP
 
 ### Across trials
+
 ```{r}
 cat("\n--- ACROSS-TRIALS MATRIX CALCULATION (DAYS TO FLOWERING) ---\n")
 y_total_flw <- as.matrix(selected_data_climate$GY)
@@ -1213,5 +1211,14 @@ ggplot(data_across, aes(x = FLW_DAYS, y = GY)) +
 
 # Conclusion
 
+Here, we explored the relationship between grain yield (GY) and agronomic traits, as plant height (PH_R8), days to flowering (FLW_DAYS), and plant emergence count (PL_EMERG_COUNT) across four soybean trials conducted in Zambia in 2023, using simple and multiple linear regression models estimated via Ordinary Least Squares. For the selection of the year and traits, we used the first report of the course, which was related to an exploratory analysis, therefore, we maintained a workflow.
 
+The multiple regression model fitted across all trials explained approximately 41% of the total grain yield variation (R² ≈ 0.41), with plant height and days to flowering identified as the most relevant predictors. After applying Bonferroni's correction for multiple testing, PH_R8 and FLW_DAYS remained statistically significant, while PL_EMERG_COUNT was marginally significant. The stepwise selection procedure corroborated these findings, retaining all three variables in the final model, with PH_R8 entering first as the trait most correlated with yield.
 
+The individual trial analyses revealed a strong genotype-by-environment (GxE) interaction, underscoring that the global trends observed across all locations do not necessarily hold within each specific environment. While plant height showed a positive association with yield at the national scale, this relationship was non-significant in Trials L0118 and L074, and notably negative in Trial L0133 (R² = 0.122, p \< 0.001), a result potentially linked to the environmental conditions of the location. These contrasting responses highlight the risk of applying a single selection criterion across diverse environments.
+
+# **Peguei essa parte da sua escrita ali a cima...se não achar repetitivo...** 
+
+The inclusion of mean daily precipitation (PRECTOTCORR) as a climatic covariate substantially improved model performance, increasing R² from 0.02 to 0.34 in the model combining PH_R8 and precipitation. This result reinforces that environmental factors are major drivers of yield variability and should be incorporated into regression models to avoid confounded estimates and misleading interpretations.
+
+Taken together, these results emphasize that soybean breeding recommendations in Zambia must account for the specific environmental context of each trial. On a broader scale, prioritizing genotypes with earlier flowering and adequate vegetative vigor appears to be an interesting strategy for improving yield under the climatic conditions observed in the 2023 season. Future analyses should consider mixed models incorporating genotype-by-environment interaction terms, as well as a broader set of climatic covariates, to further improve predictive accuracy and support more reliable selection decisions, which may perhaps be incorporated into the final project.
