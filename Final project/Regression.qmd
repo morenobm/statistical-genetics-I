@@ -1,5 +1,5 @@
 ---
-title: "Regression"
+title: "Linear Regression"
 author: 
   - name: Bruna Moreno, Daniele Bononi, João Vitor Calvo, Renan Fantine
     affiliation:
@@ -1140,6 +1140,7 @@ beta_total_PL <- solve(t(X_total_PL) %*% X_total_PL, t(X_total_PL) %*% y_total_P
 print(beta_total_PL)
 
 mod_total_PL <- lm(GY ~ PL_EMERG_COUNT + PRECTOTCORR, data = selected_data_climate)
+summary(mod_total_PL)
 r2_val_PL <- round(summary(mod_total_PL)$r.squared, 3)
 selected_data_climate$predicted_pl <- predict(mod_total_PL)
 p_val <- summary(mod_total)$coefficients[2,4]
@@ -1166,7 +1167,7 @@ ggplot(selected_data_climate, aes(x = predicted_pl, y = GY)) +
 cat("\n--- ACROSS-TRIALS MATRIX CALCULATION (DAYS TO FLOWERING) ---\n")
 y_total_flw <- as.matrix(selected_data_climate$GY)
 X_total_flw <- as.matrix(cbind(Intercept = 1, 
-                              PL = selected_data_climate$PL_EMERG_COUNT,
+                              FLW = selected_data_climate$FLW_DAYS,
                               PRECIP = selected_data_climate$PRECTOTCORR))
 
 # Matrix Calculation
@@ -1174,6 +1175,7 @@ beta_total_flw <- solve(t(X_total_flw) %*% X_total_flw, t(X_total_flw) %*% y_tot
 print(beta_total_flw)
 
 mod_total_flw <- lm(GY ~ FLW_DAYS + PRECTOTCORR, data = selected_data_climate)
+summary(mod_total_flw)
 r2_val_flw <- round(summary(mod_total_flw)$r.squared, 3)
 selected_data_climate$predicted_flw <- predict(mod_total_flw)
 p_val <- summary(mod_total_flw)$coefficients[2,4]
@@ -1181,44 +1183,27 @@ p_val <- summary(mod_total_flw)$coefficients[2,4]
 # Visualizing Across-Trials for FLW_DAYS
 ggplot(selected_data_climate, aes(x = predicted_flw, y = GY)) +
   geom_point(alpha = 0.4, color = "gray40") +
-  geom_smooth(method = "lm", color = "maroon", fill = "maroon", linewidth = 1.2) +
+  geom_smooth(method = "lm", color = "coral3", fill = "coral3", linewidth = 1.2) +
   annotate("label", x = -Inf, y = Inf, 
            label = paste0("Modelo: GY ~ FLW_DAYS + PRECTOTCORR",
                           "\nR² = ", r2_val, 
                           "\np = ", p_val),
-           hjust = -0.1, vjust = 1.2, color = "maroon", fontface = "bold", size = 4) +
+           hjust = -0.1, vjust = 1.2, color = "coral3", fontface = "bold", size = 4) +
   labs(x = "Predited Grain Yield (kg/ha)", 
        y = "Grain Yield - GY (kg/ha)") +
   theme_minimal()
 
 ```
-
-```{r}
-ggplot(data_across, aes(x = FLW_DAYS, y = GY)) +
-  geom_point(alpha = 0.3, color = "gray40") +
-  geom_smooth(method = "lm", color = "green", fill = "skyblue", size = 1.2) +
-  annotate("label", x = -Inf, y = Inf, 
-           label = paste0("y = ", round(beta_hat[2], 2), "x + ", round(beta_hat[1], 2), 
-                          "\nR² = ", r2_all_FLW, "\np = ", round(summary(model_GY)$coefficients[2,4], 3)),
-           hjust = -0.1, vjust = 1.2, color = "forestgreen", fontface = "bold", size = 5) +
-  labs(title = "Across-Trials Overview: Days to flowering (Zambia 2023)", 
-       subtitle = "Consolidated relationship between Days to flowering and Grain Yield",
-       x = "Days to flowering - FLW_DAYS (Count)", 
-       y = "Grain Yield - GY (kg/ha)") +
-  theme_minimal()
-
-```
+Unlike the previous analysis, the inclusion of the climatic variable did not improve the linear model for Days to Flowering (FLW_DAYS) ($p-value = 0.14$). This highlights the complexity of integrating environmental parameters into linear frameworks. Such results suggest that there is other types of relationship which may be non-linear, potentially requiring more sophisticated approaches like polynomial regression or Generalized Additive Models (GAMs) to investigate.
 
 # Conclusion
 
 Here, we explored the relationship between grain yield (GY) and agronomic traits, as plant height (PH_R8), days to flowering (FLW_DAYS), and plant emergence count (PL_EMERG_COUNT) across four soybean trials conducted in Zambia in 2023, using simple and multiple linear regression models estimated via Ordinary Least Squares. For the selection of the year and traits, we used the first report of the course, which was related to an exploratory analysis, therefore, we maintained a workflow.
 
-The multiple regression model fitted across all trials explained approximately 41% of the total grain yield variation (R² ≈ 0.41), with plant height and days to flowering identified as the most relevant predictors. After applying Bonferroni's correction for multiple testing, PH_R8 and FLW_DAYS remained statistically significant, while PL_EMERG_COUNT was marginally significant. The stepwise selection procedure corroborated these findings, retaining all three variables in the final model, with PH_R8 entering first as the trait most correlated with yield.
+The multiple regression model fitted across all trials explained approximately 41% of the total grain yield variation ($R^2$ ≈ 0.41), with plant height and days to flowering identified as the most relevant predictors. After applying Bonferroni's correction for multiple testing, PH_R8 and FLW_DAYS remained statistically significant, while PL_EMERG_COUNT was marginally significant. The stepwise selection procedure corroborated these findings, retaining all three variables in the final model, with PH_R8 entering first as the trait most correlated with yield.
 
-The individual trial analyses revealed a strong genotype-by-environment (GxE) interaction, underscoring that the global trends observed across all locations do not necessarily hold within each specific environment. While plant height showed a positive association with yield at the national scale, this relationship was non-significant in Trials L0118 and L074, and notably negative in Trial L0133 (R² = 0.122, p \< 0.001), a result potentially linked to the environmental conditions of the location. These contrasting responses highlight the risk of applying a single selection criterion across diverse environments.
+The individual trial analyses revealed a strong genotype-by-environment (GxE) interaction, underscoring that the global trends observed across all locations do not necessarily hold within each specific environment. While plant height showed a positive association with yield at the national scale, this relationship was non-significant in Trials L0118 and L074, and notably negative in Trial L0133 ($R^2$ = 0.122, p \< 0.001), a result potentially linked to the environmental conditions of the location. These contrasting responses highlight the risk of applying a single selection criterion across diverse environments.
 
-# **Peguei essa parte da sua escrita ali a cima...se não achar repetitivo...** 
-
-The inclusion of mean daily precipitation (PRECTOTCORR) as a climatic covariate substantially improved model performance, increasing R² from 0.02 to 0.34 in the model combining PH_R8 and precipitation. This result reinforces that environmental factors are major drivers of yield variability and should be incorporated into regression models to avoid confounded estimates and misleading interpretations.
+The inclusion of mean daily precipitation (PRECTOTCORR) as a climatic covariate substantially improved model performance for some of the analyzed traits, increasing $R^2$ from 0.02 to 0.34 in the model combining PH_R8 and precipitation. This result reinforces that environmental factors are major drivers of yield variability and should be incorporated into regression models to avoid confounded estimates and misleading interpretations.
 
 Taken together, these results emphasize that soybean breeding recommendations in Zambia must account for the specific environmental context of each trial. On a broader scale, prioritizing genotypes with earlier flowering and adequate vegetative vigor appears to be an interesting strategy for improving yield under the climatic conditions observed in the 2023 season. Future analyses should consider mixed models incorporating genotype-by-environment interaction terms, as well as a broader set of climatic covariates, to further improve predictive accuracy and support more reliable selection decisions, which may perhaps be incorporated into the final project.
