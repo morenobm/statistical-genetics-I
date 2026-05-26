@@ -1,0 +1,45 @@
+---
+title: "Final Project Zambia"
+author: 
+  - name: Bruna Moreno, Daniele Bononi, João Vitor Calvo, Renan Fantine
+    affiliation:
+      - name: Department of Genetics, ESALQ-USP
+        city: Piracicaba, São Paulo, Brazil
+format: 
+  html:
+    toc: true
+    toc-location: left
+    code-overflow: wrap
+    code-fold: true
+    fig-align: center
+    fig-width: 10
+    theme: 
+      light: journal
+      dark: darkly
+    embed-resources: true
+
+crossref: {}
+---
+
+```{r}
+#| label: setup
+#| include: false
+
+knitr::opts_chunk$set(
+  fig.show = "hold",
+  warning = FALSE,
+  message = FALSE,
+  results = "hold")
+```
+
+# Introduction
+
+
+# Materials and Methods
+
+
+# Results
+
+
+
+# Discussion
