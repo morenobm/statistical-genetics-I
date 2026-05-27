@@ -1,0 +1,111 @@
+---
+title: "Data Analysis RCBD in Zambia"
+author: 
+  - name: Bruna Moreno, Daniele Bononi, João Vitor Calvo, Renan Fantine
+    affiliation:
+      - name: Department of Genetics, ESALQ-USP
+        city: Piracicaba, São Paulo, Brazil
+format: 
+  html:
+    toc: true
+    toc-location: left
+    code-overflow: wrap
+    code-fold: true
+    fig-align: center
+    fig-width: 10
+    theme: 
+      light: journal
+      dark: darkly
+    embed-resources: true
+
+crossref: {}
+---
+
+```{r}
+#| label: setup
+#| include: false
+
+knitr::opts_chunk$set(
+  fig.show = "hold",
+  warning = FALSE,
+  message = FALSE,
+  results = "hold")
+```
+
+```{r}
+#| label: trials-data
+
+# Loading packages
+library(ggplot2)
+library(patchwork)
+library(tidyr)
+library(dplyr)
+library(purrr)
+library(knitr)
+library(kableExtra)
+library(grid)
+library(ggcorrplot)
+library(car)
+
+# Loading phenotypic data (Zambia)
+data = read.csv("https://raw.githubusercontent.com/mauricioaraujj/Pan_African_Trials_Network/refs/heads/main/data/data.csv", sep = ';') |> filter(COUNTRY == "Zambia") 
+
+# Selecting traits
+traits <- c("FLW_DAYS", "GY", "PH_R8", "PL_EMERG_COUNT", "Pod_Shattering")
+selected_data <- data |> 
+  select(COUNTRY, YEAR, env, gen, loc, SEASON, rep, check, all_of(traits)) |> 
+  filter(loc %in% c("L0118", "L0133", "L074", "L0134") & YEAR == "2023") |> 
+  mutate(trial = case_when(
+    loc == "L0118" & YEAR == "2023" ~ 1,
+    loc == "L0133" & YEAR == "2023" ~ 2,
+    loc == "L074"  & YEAR == "2023" ~ 3,
+    loc == "L0134" & YEAR == "2023" ~ 4)) |> 
+  mutate(trial = as.factor(trial)) |> na.omit()
+
+# Trial 1 - Local "L0118" / Year "2023" 
+trial_1 <- selected_data |> filter(trial == "1") |> na.omit()
+genotypes_1 <- trial_1$gen
+
+# Trial 2 - Local "L0133" / Year "2023" 
+trial_2 <- selected_data |> filter(trial == "2") |> na.omit()
+genotypes_2 <- trial_2$gen
+
+# Trial 3 - Local "L074" / Year "2023" 
+trial_3 <- selected_data |> filter(trial == "3") |> na.omit()
+genotypes_3 <- trial_3$gen
+
+# Trial 4 - Local "L0134" / Year "2023" 
+trial_4 <- selected_data |> filter(trial == "4") |> na.omit()
+genotypes_4 <- trial_4$gen
+```
+
+# Exercise 
+Choose two traits. Perform data analysis of all trials in your dataset using a RCBD model. Justify your choice in using the treatment and the block effects as fixed or random. Report the variance component estimates, the hypothesis test results, the broad-sense heritability, the coefficient of experimental variation, and the selection candidates' BLUPs and reliabilities. Finally, compare the rankings between trials and speculate the reasons why they are different/similar. This task must be carried out within groups. 
+
+
+# Introduction
+
+
+# Trait \#1 
+## Variance component estimates
+
+## Hypothesis test
+
+## Broad-sense heritability estimation
+
+## Coefficient of experimental variation
+
+
+# Trait \#2
+## Variance component estimates
+
+## Hypothesis test
+
+## Broad-sense heritability estimation
+
+## Coefficient of experimental variation
+
+# Selection of candidates
+
+
+# Discussion
