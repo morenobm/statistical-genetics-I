@@ -51,17 +51,126 @@ library(car)
 data = read.csv("https://raw.githubusercontent.com/mauricioaraujj/Pan_African_Trials_Network/refs/heads/main/data/data.csv", sep = ';') |> filter(COUNTRY == "Zambia")
 ```
 
+```{r}
+# Para datasets grandes, ajuste o número de bins
+ggplot(data, aes(x = PH_R8)) +
+  geom_histogram(bins = 100, fill = "steelblue", alpha = 0.7) +
+  geom_vline(xintercept = mean(data$PH_R8, na.rm = TRUE), 
+             color = "red", linetype = "dashed", size = 1) +
+  geom_vline(xintercept = mean(data$PH_R8, na.rm = TRUE) + 
+               c(-3, 3) * sd(data$PH_R8, na.rm = TRUE), 
+             color = "orange", linetype = "dotted", size = 1) +
+  labs(title = "Histograma com limites de outliers (±3σ)",
+       x = "Valor", y = "Frequência") +
+  theme_minimal()
+
+# Criar histograma com boxplot abaixo
+p_hist <- ggplot(data, aes(x = PH_R8)) +
+  geom_histogram(bins = 100, fill = "steelblue", alpha = 0.7) +
+  theme_minimal() +
+  theme(axis.title.x = element_blank())
+
+p_box <- ggplot(data, aes(y = PH_R8, x = "")) +
+  geom_boxplot(fill = "steelblue", alpha = 0.7, outlier.color = "red", 
+               outlier.size = 2, outlier.alpha = 0.5) +
+  coord_flip() +
+  theme_minimal() +
+  theme(axis.title.y = element_blank(),
+        axis.text.y = element_blank())
+
+p_hist / p_box + plot_layout(heights = c(3, 1))
+```
+```{r}
+## GY 
+# Para datasets grandes, ajuste o número de bins
+ggplot(data, aes(x = GY)) +
+  geom_histogram(bins = 100, fill = "steelblue", alpha = 0.7) +
+  geom_vline(xintercept = mean(data$GY, na.rm = TRUE), 
+             color = "red", linetype = "dashed", size = 1) +
+  geom_vline(xintercept = mean(data$GY, na.rm = TRUE) + 
+               c(-3, 3) * sd(data$GY, na.rm = TRUE), 
+             color = "orange", linetype = "dotted", size = 1) +
+  labs(title = "Histograma com limites de outliers (±3σ)",
+       x = "Valor", y = "Frequência") +
+  theme_minimal()
+
+# Criar histograma com boxplot abaixo
+p_hist <- ggplot(data, aes(x = GY)) +
+  geom_histogram(bins = 100, fill = "steelblue", alpha = 0.7) +
+  theme_minimal() +
+  theme(axis.title.x = element_blank())
+
+p_box <- ggplot(data, aes(y = GY, x = "")) +
+  geom_boxplot(fill = "steelblue", alpha = 0.7, outlier.color = "red", 
+               outlier.size = 2, outlier.alpha = 0.5) +
+  coord_flip() +
+  theme_minimal() +
+  theme(axis.title.y = element_blank(),
+        axis.text.y = element_blank())
+
+p_hist / p_box + plot_layout(heights = c(3, 1))
+
+## Removendo outlier
+df <- data|> 
+  mutate (GY = case_when(
+    GY == 10650.85 ~ NA,
+    TRUE ~ GY
+  )) |> 
+  mutate(PH_R8 = case_when(
+    PH_R8 == 0 ~ NA,
+    PH_R8 == 0.0 ~ NA,
+    PH_R8 == 308.33 ~ NA,
+    TRUE ~ PH_R8
+  ))
+```
+USAR O DF COMO BASE DE DADOS!!! ELE JÁ ESTÁ FILTRADO
+
 # Exercise 
 Choose two traits. Perform data analysis of all trials in your dataset using a RCBD model. Justify your choice in using the treatment and the block effects as fixed or random. Report the variance component estimates, the hypothesis test results, the broad-sense heritability, the coefficient of experimental variation, and the selection candidates' **BLUPs and reliabilities**. Finally, compare the rankings between trials and speculate the reasons why they are different/similar. This task must be carried out within groups. 
 
 
 # Introduction
 
-
+USAR O DF COMO BASE DE DADOS!!! ELE JÁ ESTÁ FILTRADO
 # Trait \#1 - GY
 
+#Modelo completo - João
+## Variance component estimates
 
+## Hypothesis test
 
+## Broad-sense heritability estimation
+
+## Coefficient of experimental variation
+
+#Modelo local 1 todos os anos - Bruna
+## Variance component estimates
+
+## Hypothesis test
+
+## Broad-sense heritability estimation
+
+## Coefficient of experimental variation
+
+#Modelo local 2 todos os anos - Renan
+## Variance component estimates
+
+## Hypothesis test
+
+## Broad-sense heritability estimation
+
+## Coefficient of experimental variation
+
+#Modelo ano 1 todos os locais - Bruna
+## Variance component estimates
+
+## Hypothesis test
+
+## Broad-sense heritability estimation
+
+## Coefficient of experimental variation
+
+#Modelo ano 1 todos os locais - Renan
 ## Variance component estimates
 
 ## Hypothesis test
@@ -71,7 +180,9 @@ Choose two traits. Perform data analysis of all trials in your dataset using a R
 ## Coefficient of experimental variation
 
 
+USAR O DF COMO BASE DE DADOS!!! ELE JÁ ESTÁ FILTRADO
 # Trait \#2 - PH
+#Modelo completo - João
 ## Variance component estimates
 
 ## Hypothesis test
@@ -80,7 +191,35 @@ Choose two traits. Perform data analysis of all trials in your dataset using a R
 
 ## Coefficient of experimental variation
 
-# Selection of candidates
+#Modelo local 1 todos os anos - Bruna
+## Variance component estimates
+
+## Hypothesis test
+
+## Broad-sense heritability estimation
+
+## Coefficient of experimental variation
+
+#Modelo local 2 todos os anos - Renan
+## Variance component estimates
+
+## Hypothesis test
+
+## Broad-sense heritability estimation
+
+## Coefficient of experimental variation
+
+#Modelo ano 1 todos os locais - Bruna
+## Variance component estimates
+
+## Hypothesis test
+
+## Broad-sense heritability estimation
+
+## Coefficient of experimental variation
+
+#Modelo ano 1 todos os locais - Renan
+## Variance component estimates
 
 
 # Discussion
