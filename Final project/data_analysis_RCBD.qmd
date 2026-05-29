@@ -36,16 +36,8 @@ knitr::opts_chunk$set(
 #| label: trials-data
 
 # Loading packages
-library(ggplot2)
-library(patchwork)
-library(tidyr)
-library(dplyr)
-library(purrr)
-library(knitr)
-library(kableExtra)
-library(grid)
-library(ggcorrplot)
-library(car)
+packages <- c("ggplot2", "patchwork", "tidyr", "dplyr", "purrr", "knitr", "kableExtra", "grid","ggcorrplot")
+invisible(lapply(packages, library, character.only = TRUE))
 
 # Loading phenotypic data (Zambia)
 data = read.csv("https://raw.githubusercontent.com/mauricioaraujj/Pan_African_Trials_Network/refs/heads/main/data/data.csv", sep = ';') |> filter(COUNTRY == "Zambia")
