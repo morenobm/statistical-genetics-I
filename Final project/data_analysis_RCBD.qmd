@@ -114,6 +114,15 @@ df <- data|>
     PH_R8 == 308.33 ~ NA,
     TRUE ~ PH_R8
   ))
+
+## Ajustando colunas
+df$YEAR <- as.factor(df$YEAR)
+df$loc <- as.factor(df$loc)
+df$env <- as.factor(df$env)
+df$check <- as.factor(df$check)
+df$rep <- as.factor(df$rep)
+df$gen <- as.factor(df$gen)
+df$RAINFED <- as.factor(df$RAINFED)
 ```
 USAR O DF COMO BASE DE DADOS!!! ELE JÁ ESTÁ FILTRADO
 
