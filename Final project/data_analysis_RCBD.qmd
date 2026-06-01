@@ -17,8 +17,10 @@ format:
       light: journal
       dark: darkly
     embed-resources: true
-
 crossref: {}
+editor: 
+  markdown: 
+    wrap: 72
 ---
 
 ```{r}
@@ -72,6 +74,7 @@ p_box <- ggplot(data, aes(y = PH_R8, x = "")) +
 
 p_hist / p_box + plot_layout(heights = c(3, 1))
 ```
+
 ```{r}
 ## GY 
 # Para datasets grandes, ajuste o número de bins
@@ -124,19 +127,31 @@ df$rep <- as.factor(df$rep)
 df$gen <- as.factor(df$gen)
 df$RAINFED <- as.factor(df$RAINFED)
 ```
+
+Add isso
+
+```{r}
+library(asreml)
+```
+
 USAR O DF COMO BASE DE DADOS!!! ELE JÁ ESTÁ FILTRADO
 
-# Exercise 
-Choose two traits. Perform data analysis of all trials in your dataset using a RCBD model. Justify your choice in using the treatment and the block effects as fixed or random. Report the variance component estimates, the hypothesis test results, the broad-sense heritability, the coefficient of experimental variation, and the selection candidates' **BLUPs and reliabilities**. Finally, compare the rankings between trials and speculate the reasons why they are different/similar. This task must be carried out within groups. 
+# Exercise
 
+Choose two traits. Perform data analysis of all trials in your dataset
+using a RCBD model. Justify your choice in using the treatment and the
+block effects as fixed or random. Report the variance component
+estimates, the hypothesis test results, the broad-sense heritability,
+the coefficient of experimental variation, and the selection candidates'
+**BLUPs and reliabilities**. Finally, compare the rankings between
+trials and speculate the reasons why they are different/similar. This
+task must be carried out within groups.
 
 # Introduction
 
-USAR O DF COMO BASE DE DADOS!!! ELE JÁ ESTÁ FILTRADO
-# Trait \#1 - GY
+USAR O DF COMO BASE DE DADOS!!! ELE JÁ ESTÁ FILTRADO \# Trait #1 - GY
 
-#Modelo completo - João
-## Variance component estimates
+#Modelo completo - João \## Variance component estimates
 
 ## Hypothesis test
 
@@ -144,8 +159,7 @@ USAR O DF COMO BASE DE DADOS!!! ELE JÁ ESTÁ FILTRADO
 
 ## Coefficient of experimental variation
 
-#Modelo local 1 todos os anos - Bruna
-## Variance component estimates
+#Modelo local 1 todos os anos - Bruna \## Variance component estimates
 
 ## Hypothesis test
 
@@ -153,8 +167,155 @@ USAR O DF COMO BASE DE DADOS!!! ELE JÁ ESTÁ FILTRADO
 
 ## Coefficient of experimental variation
 
-#Modelo local 2 todos os anos - Renan
+----
+
+#Modelo local 2 todos os anos - Renan \## Variance component estimates
+
+Before diving into the mixed models, we selected location L099 for this
+location-specific temporal analysis. Based on the cross-tabulation of
+the trial network, L099 stands out as one of the most consistent
+environments, possessing robust phenotypic data across almost all
+evaluated years, with a single gap in the 2022 season.
+
+```{r}
+#| label: model-local2-gy
+#| warning: false
+#| message: false
+
+# Local 2 Model (All Years) - L099 | Trait: GY (Grain Yield)
+
+# 1. Data Preparation
+df_L099_GY <- df |> 
+  filter(loc == "L099") |> 
+  droplevels()
+
+# 2. Mixed Model Fitting (by ASReml)
+mod_L099_GY <- asreml(
+  fixed = GY ~ 1 + RAINFED,
+  random = ~ YEAR + YEAR:rep + gen + gen:YEAR,
+  residual = ~ idv(units),
+  data = df_L099_GY,
+  trace = FALSE #
+)
+mod_L099_GY <- update(mod_L099_GY)
+```
+
+#RAINFED do modelo do L099?? será que o Rainfed é o melhor como efeito
+fixo???
+
+## Hypothesis test
+
+```{r}
+#| label: var-test-local2-gy
+
 ## Variance component estimates
+print("Variance Components (Location L099 - GY):")
+summary(mod_L099_GY)$varcomp
+
+## Hypothesis test
+print("Wald Test for Fixed Effect (RAINFED):")
+wald.asreml(mod_L099_GY)
+
+# LRT for Genotypic Effect
+mod_L099_GY_reduced <- asreml(
+  fixed = GY ~ 1 + RAINFED,
+  random = ~ YEAR + YEAR:rep + gen:YEAR,
+  residual = ~ idv(units),
+  data = df_L099_GY,
+  trace = FALSE
+)
+print("LRT for Genotypic Variance:")
+lrt(mod_L099_GY, mod_L099_GY_reduced)
+```
+
+The Wald test indicated that the water regime (RAINFED) had no
+significant effect (p = 0.25) on grain yield at the L099 location.
+Furthermore, the variance components revealed a massive Genotype
+$\times$ Year interaction variance (174,271), which was over five times
+larger than the genotypic variance (31,247). Consequently, the main
+genotypic effect was not significant in the LRT (p = 0.24),
+demonstrating that climatic fluctuations across seasons heavily dictate
+cultivar performance and cause severe rank changes over time.
+
+## Broad-sense heritability estimation & Coefficient of experimental variation
+
+```{r}
+#| label: metrics-local2-gy
+
+## Broad-sense heritability estimation
+n_years_L099 <- length(levels(df_L099_GY$YEAR))
+
+reps_per_year_L099 <- df_L099_GY |> 
+  group_by(YEAR) |> 
+  summarise(n = n_distinct(rep))
+n_rep_mean_L099 <- mean(reps_per_year_L099$n)
+
+vc_L099 <- summary(mod_L099_GY)$varcomp
+vg_L099  <- vc_L099["gen", "component"]
+vga_L099 <- vc_L099["gen:YEAR", "component"]
+ve_L099  <- vc_L099["units!units", "component"]
+
+# Heritability 
+h2_L099_manual <- vg_L099 / (vg_L099 + (vga_L099 / n_years_L099) + (ve_L099 / (n_years_L099 * n_rep_mean_L099)))
+
+print(paste("Broad-sense Heritability (H2):", round(h2_L099_manual, 4)))
+
+## Coefficient of experimental variation
+var_res_L099_real <- vc_L099["units!units", "component"]
+mean_GY_L099 <- mean(df_L099_GY$GY, na.rm = TRUE)
+
+cve_L099 <- (sqrt(var_res_L099_real) / mean_GY_L099) * 100
+cat("Coefficient of Experimental Variation (CVe):", round(cve_L099, 2), "%\n")
+```
+
+The coefficient of experimental variation (CVe) was 18.57%,
+demonstrating excellent experimental precision for grain yield trials.
+Broad-sense heritability was estimated at 0.31, a moderate-to-low value
+that directly reflects the strong influence of the Genotype $\times$
+Year interaction, confirming that climatic variation across seasons at
+L099 heavily masks the pure genetic expression of the cultivars.
+
+```{r}
+#| label: blups-local2-gy
+
+## BLUPs and Predicted Means Extraction
+pred_L099 <- predict(mod_L099_GY, classify = "gen")
+predicted_means <- pred_L099$pvals
+
+## Extracting Pure Random Effects (To get the correct BLUP Standard Error)
+random_effects <- summary(mod_L099_GY, coef = TRUE)$coef.random |> 
+  as.data.frame() |> 
+  tibble::rownames_to_column("Term") |> 
+  filter(grepl("^gen_", Term)) |> 
+  mutate(gen = gsub("gen_", "", Term)) |> 
+  rename(SE_BLUP = std.error) |> 
+  select(gen, SE_BLUP)
+
+## Genetic Variance
+vg_L099 <- summary(mod_L099_GY)$varcomp["gen", "component"]
+
+## Merging and calculating True Reliability
+blups_L099_Final <- predicted_means |> 
+  left_join(random_effects, by = "gen") |> 
+  mutate(Reliability = 1 - (SE_BLUP^2 / vg_L099)) |> 
+  select(gen, predicted.value, SE_BLUP, status, Reliability) |> 
+  arrange(desc(predicted.value))
+
+print("Top 10 Genotypes (Predicted Means and Corrected Reliability):")
+head(blups_L099_Final, 10) |> 
+  knitr::kable(digits = 3)
+```
+
+Genotypic predictions (BLUPs) revealed that materials G068, G319, and
+G092 showed the highest yield potential for the L099 location. The
+reliabilities of these predictions ranged from 0.10 to 0.25. These
+values reflect the high Genotype $\times$ Year interaction variance,
+indicating that the recommendation of these cultivars must account for
+strong climatic fluctuations between seasons (across years)
+
+-----
+
+#Modelo ano 1 todos os locais - Bruna \## Variance component estimates
 
 ## Hypothesis test
 
@@ -162,8 +323,9 @@ USAR O DF COMO BASE DE DADOS!!! ELE JÁ ESTÁ FILTRADO
 
 ## Coefficient of experimental variation
 
-#Modelo ano 1 todos os locais - Bruna
-## Variance component estimates
+-----
+
+#Modelo ano 1 todos os locais - Renan \## Variance component estimates
 
 ## Hypothesis test
 
@@ -171,8 +333,169 @@ USAR O DF COMO BASE DE DADOS!!! ELE JÁ ESTÁ FILTRADO
 
 ## Coefficient of experimental variation
 
-#Modelo ano 1 todos os locais - Renan
+To evaluate spatial stability, we selected the 2023, which presented the
+broadest geographical coverage in the dataset (8 active trial
+locations). Prior to fitting the spatial model, we assessed the trial
+network's connectivity to avoid highly unbalanced estimations. The
+dataset demonstrated balance: out of 30 evaluated genotypes, 28 were
+concurrently tested across all 8 locations.
+
+```{r}
+#| label: model-year1-gy
+#| warning: false
+#| message: false
+
+# 1. Data Preparation
+# Filtering the main dataset for 2023 and dropping unused levels.
+df_2023_GY <- df |> 
+  filter(YEAR == "2023") |> 
+  droplevels()
+
+# 2. Mixed Model Fitting 
+mod_2023_GY <- asreml(
+  fixed = GY ~ 1 + RAINFED,
+  random = ~ loc + loc:rep + gen + gen:loc,
+  residual = ~ idv(units),
+  data = df_2023_GY,
+  trace = FALSE
+)
+
+# Ensuring variance convergence
+mod_2023_GY <- update(mod_2023_GY)
+```
+
+For this single-year spatial analysis, the trial locations represent the
+distinct environmental conditions. We fitted a mixed model treating the
+management regime (RAINFED) as a fixed effect, while the 8 locations,
+experimental repetitions, and genotypes were treated as random effects.
+This structure allows us to model the spatial environmental noise and
+accurately isolate the Genotype $\times$ Location variance to identify
+the most geographically stable cultivars.
+
+## Hypothesis test
+
+```{r}
+#| label: var-test-year1-gy
+
 ## Variance component estimates
+print("Variance Components (Year 2023 - GY):")
+summary(mod_2023_GY)$varcomp
+
+## Hypothesis test
+print("Wald Test for Fixed Effect (RAINFED):")
+wald.asreml(mod_2023_GY)
+
+# LRT for Genotypic Effect
+mod_2023_GY_reduced <- asreml(
+  fixed = GY ~ 1 + RAINFED,
+  random = ~ loc + loc:rep + gen:loc,
+  residual = ~ idv(units),
+  data = df_2023_GY,
+  trace = FALSE
+)
+print("LRT for Genotypic Variance:")
+lrt(mod_2023_GY, mod_2023_GY_reduced)
+```
+
+The Wald test indicated that the water management regime (RAINFED) had a
+highly significant effect (p \< 0.001) on grain yield across the
+evaluated locations in 2023. Furthermore, the variance components
+revealed a massive Genotype $\times$ Location interaction variance
+(176,858.86), nearly four times larger than the pure genotypic variance
+(47,547.28). Despite this spatial environmental influence causing rank
+changes among sites, the Likelihood Ratio Test (LRT) confirmed that the
+main genotypic effect remained highly significant (p \< 0.001),
+indicating a strong and selectable genetic contribution to yield across
+the trial network.
+
+## Broad-sense heritability estimation & Coefficient of experimental variation
+
+```{r}
+#| label: metrics-year1-gy
+
+## Broad-sense heritability estimation
+n_locs_2023 <- length(levels(df_2023_GY$loc))
+
+reps_per_loc_2023 <- df_2023_GY |> 
+  group_by(loc) |> 
+  summarise(n = n_distinct(rep))
+n_rep_mean_2023 <- mean(reps_per_loc_2023$n)
+
+# Extracting components by name
+vc_2023 <- summary(mod_2023_GY)$varcomp
+vg_2023  <- vc_2023["gen", "component"]
+vgl_2023 <- vc_2023["gen:loc", "component"]
+ve_2023  <- vc_2023["units!units", "component"]
+
+h2_2023_manual <- vg_2023 / (vg_2023 + (vgl_2023 / n_locs_2023) + (ve_2023 / (n_locs_2023 * n_rep_mean_2023)))
+
+print(paste("Broad-sense Heritability (H2) for 2023:", round(h2_2023_manual, 4)))
+
+## Coefficient of experimental variation
+var_res_2023_real <- vc_2023["units!units", "component"]
+mean_GY_2023 <- mean(df_2023_GY$GY, na.rm = TRUE)
+
+cve_2023 <- (sqrt(var_res_2023_real) / mean_GY_2023) * 100
+cat("Coefficient of Experimental Variation (CVe):", round(cve_2023, 2), "%\n")
+```
+
+The coefficient of experimental variation (CVe) was 20.36%, indicating
+an acceptable and typical level of experimental precision for
+multi-environment field trials evaluating grain yield. Broad-sense
+heritability was estimated at 0.56. This metric corroborates the highly
+significant genotypic effect observed in the Likelihood Ratio Test,
+demonstrating that despite the considerable Genotype $\times$ Location
+interaction, the pure genetic variance is robust enough to allow for
+reliable selection of superior and spatially stable cultivars across
+trial network.
+
+```{r}
+#| label: blups-year1-gy
+
+## BLUPs and Predicted Means Extraction
+pred_2023 <- predict(mod_2023_GY, classify = "gen")
+predicted_means_2023 <- pred_2023$pvals
+
+random_effects_2023 <- summary(mod_2023_GY, coef = TRUE)$coef.random |> 
+  as.data.frame() |> 
+  tibble::rownames_to_column("Term") |> 
+  filter(grepl("^gen_", Term)) |> 
+  mutate(gen = gsub("gen_", "", Term)) |> 
+  rename(SE_BLUP = std.error) |> 
+  select(gen, SE_BLUP)
+
+## Merging and calculating True Reliability
+blups_2023_Final <- predicted_means_2023 |> 
+  left_join(random_effects_2023, by = "gen") |> 
+  mutate(Reliability = 1 - (SE_BLUP^2 / vg_2023)) |> 
+  select(gen, predicted.value, SE_BLUP, status, Reliability) |> 
+  arrange(desc(predicted.value))
+
+print("Top 10 Genotypes (2023 Spatial Stability):")
+head(blups_2023_Final, 10) |> 
+  knitr::kable(digits = 3)
+```
+
+Genotypic predictions (BLUPs) identified G137 as the standout cultivar,
+demonstrating the highest spatial stability and yield potential across
+the 2023 trial network, followed by G335 and G359. The reliabilities of
+these predictions were robust, stabilizing around 0.53 to 0.54. These
+values are substantially higher than those observed in the
+single-location temporal model, reflecting the strong broad-sense
+heritability (0.56) and confirming that these specific genotypes
+maintain superior, reliable performance across diverse geographical
+environments despite the spatial Genotype $\times$ Location interaction.
+
+is:
+
+```{r}
+1 + 1
+```
+
+------
+
+USAR O DF COMO BASE DE DADOS!!! ELE JÁ ESTÁ FILTRADO \# Trait #2 - PH
+#Modelo completo - João \## Variance component estimates
 
 ## Hypothesis test
 
@@ -180,11 +503,7 @@ USAR O DF COMO BASE DE DADOS!!! ELE JÁ ESTÁ FILTRADO
 
 ## Coefficient of experimental variation
 
-
-USAR O DF COMO BASE DE DADOS!!! ELE JÁ ESTÁ FILTRADO
-# Trait \#2 - PH
-#Modelo completo - João
-## Variance component estimates
+#Modelo local 1 todos os anos - Bruna \## Variance component estimates
 
 ## Hypothesis test
 
@@ -192,8 +511,7 @@ USAR O DF COMO BASE DE DADOS!!! ELE JÁ ESTÁ FILTRADO
 
 ## Coefficient of experimental variation
 
-#Modelo local 1 todos os anos - Bruna
-## Variance component estimates
+#Modelo local 2 todos os anos - Renan \## Variance component estimates
 
 ## Hypothesis test
 
@@ -201,8 +519,7 @@ USAR O DF COMO BASE DE DADOS!!! ELE JÁ ESTÁ FILTRADO
 
 ## Coefficient of experimental variation
 
-#Modelo local 2 todos os anos - Renan
-## Variance component estimates
+#Modelo ano 1 todos os locais - Bruna \## Variance component estimates
 
 ## Hypothesis test
 
@@ -210,30 +527,22 @@ USAR O DF COMO BASE DE DADOS!!! ELE JÁ ESTÁ FILTRADO
 
 ## Coefficient of experimental variation
 
-#Modelo ano 1 todos os locais - Bruna
-## Variance component estimates
-
-## Hypothesis test
-
-## Broad-sense heritability estimation
-
-## Coefficient of experimental variation
-
-#Modelo ano 1 todos os locais - Renan
-## Variance component estimates
-
+#Modelo ano 1 todos os locais - Renan \## Variance component estimates
 
 # Discussion
 
-
 A fazer
 
-- filtrar os outliers do dataframe total para as duas características
-- ajustar o modelo para todos os environments (modelo = $$ y = env + env/bloco + gen + gen*env + irrigação + \epsilon$$) - sendo env, gen e gen*env como aleatório.
-- tabela para mostrar os locais nos anos que escolhemos para fazer (2) - estabilidade/adaptabilidade
-- ajustar o modelo para cada local ao longo dos anos.
-- ajustar o modelo para um ano qual é o melhor local.
+-   filtrar os outliers do dataframe total para as duas características
+-   ajustar o modelo para todos os environments (modelo =
+    $$ y = env + env/bloco + gen + gen*env + irrigação + \epsilon$$) -
+    sendo env, gen e gen\*env como aleatório.
+-   tabela para mostrar os locais nos anos que escolhemos para
+    fazer (2) - estabilidade/adaptabilidade
+-   ajustar o modelo para cada local ao longo dos anos.
+-   ajustar o modelo para um ano qual é o melhor local.
 
+se der tempo: estrutura de covariância entre anos/locais para
+identificar as correlações entre anos. Quanto mais próximos, maior. Tem
+covariância entre os anos.
 
-
-se der tempo: estrutura de covariância entre anos/locais para identificar as correlações entre anos. Quanto mais próximos, maior. Tem covariância entre os anos.
