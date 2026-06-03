@@ -1,0 +1,348 @@
+---
+title: "Interaction GxE in Zambia"
+author: 
+  - name: Bruna Moreno, Daniele Bononi, João Vitor Calvo, Renan Fantine
+    affiliation:
+      - name: Department of Genetics, ESALQ-USP
+        city: Piracicaba, São Paulo, Brazil
+format: 
+  html:
+    toc: true
+    toc-location: left
+    code-overflow: wrap
+    code-fold: true
+    fig-align: center
+    fig-width: 10
+    theme: 
+      light: journal
+      dark: darkly
+    embed-resources: true
+
+crossref: {}
+---
+
+```{r}
+#| label: setup
+#| include: false
+
+knitr::opts_chunk$set(
+  fig.show = "hold",
+  warning = FALSE,
+  message = FALSE,
+  results = "hold")
+```
+
+```{r}
+#| label: trials-data
+
+# Loading packages
+library(ggplot2)
+library(patchwork)
+library(tidyr)
+library(dplyr)
+library(purrr)
+library(knitr)
+library(kableExtra)
+library(grid)
+library(ggcorrplot)
+library(car)
+
+# Loading phenotypic data (Zambia)
+data = read.csv("https://raw.githubusercontent.com/mauricioaraujj/Pan_African_Trials_Network/refs/heads/main/data/data.csv", sep = ';') |> filter(COUNTRY == "Zambia")
+
+## Ajustando colunas
+df$YEAR <- as.factor(df$YEAR)
+df$loc <- as.factor(df$loc)
+df$env <- as.factor(df$env)
+df$check <- as.factor(df$check)
+df$rep <- as.factor(df$rep)
+df$gen <- as.factor(df$gen)
+df$RAINFED <- as.factor(df$RAINFED)
+```
+
+```{r}
+# Para datasets grandes, ajuste o número de bins
+ggplot(data, aes(x = PH_R8)) +
+  geom_histogram(bins = 100, fill = "steelblue", alpha = 0.7) +
+  geom_vline(xintercept = mean(data$PH_R8, na.rm = TRUE), 
+             color = "red", linetype = "dashed", size = 1) +
+  geom_vline(xintercept = mean(data$PH_R8, na.rm = TRUE) + 
+               c(-3, 3) * sd(data$PH_R8, na.rm = TRUE), 
+             color = "orange", linetype = "dotted", size = 1) +
+  labs(title = "Histograma com limites de outliers (±3σ)",
+       x = "Valor", y = "Frequência") +
+  theme_minimal()
+
+# Criar histograma com boxplot abaixo
+p_hist <- ggplot(data, aes(x = PH_R8)) +
+  geom_histogram(bins = 100, fill = "steelblue", alpha = 0.7) +
+  theme_minimal() +
+  theme(axis.title.x = element_blank())
+
+p_box <- ggplot(data, aes(y = PH_R8, x = "")) +
+  geom_boxplot(fill = "steelblue", alpha = 0.7, outlier.color = "red", 
+               outlier.size = 2, outlier.alpha = 0.5) +
+  coord_flip() +
+  theme_minimal() +
+  theme(axis.title.y = element_blank(),
+        axis.text.y = element_blank())
+
+p_hist / p_box + plot_layout(heights = c(3, 1))
+```
+```{r}
+## GY 
+# Para datasets grandes, ajuste o número de bins
+ggplot(data, aes(x = GY)) +
+  geom_histogram(bins = 100, fill = "steelblue", alpha = 0.7) +
+  geom_vline(xintercept = mean(data$GY, na.rm = TRUE), 
+             color = "red", linetype = "dashed", size = 1) +
+  geom_vline(xintercept = mean(data$GY, na.rm = TRUE) + 
+               c(-3, 3) * sd(data$GY, na.rm = TRUE), 
+             color = "orange", linetype = "dotted", size = 1) +
+  labs(title = "Histograma com limites de outliers (±3σ)",
+       x = "Valor", y = "Frequência") +
+  theme_minimal()
+
+# Criar histograma com boxplot abaixo
+p_hist <- ggplot(data, aes(x = GY)) +
+  geom_histogram(bins = 100, fill = "steelblue", alpha = 0.7) +
+  theme_minimal() +
+  theme(axis.title.x = element_blank())
+
+p_box <- ggplot(data, aes(y = GY, x = "")) +
+  geom_boxplot(fill = "steelblue", alpha = 0.7, outlier.color = "red", 
+               outlier.size = 2, outlier.alpha = 0.5) +
+  coord_flip() +
+  theme_minimal() +
+  theme(axis.title.y = element_blank(),
+        axis.text.y = element_blank())
+
+p_hist / p_box + plot_layout(heights = c(3, 1))
+
+## Removendo outlier
+df <- data|> 
+  mutate (GY = case_when(
+    GY == 10650.85 ~ NA,
+    TRUE ~ GY
+  )) |> 
+  mutate(PH_R8 = case_when(
+    PH_R8 == 0 ~ NA,
+    PH_R8 == 0.0 ~ NA,
+    PH_R8 == 308.33 ~ NA,
+    TRUE ~ PH_R8
+  ))
+```
+
+
+# Exercise 
+
+
+# Introduction
+
+
+# Trait \#1 - GY
+
+#Modelo completo - João
+## Variance component estimates
+
+## Hypothesis test
+
+## Broad-sense heritability estimation
+
+## Coefficient of experimental variation
+
+#Modelo local 1 todos os anos - Bruna
+
+```{r}
+table(df$env, df$YEAR)
+table(df$loc, df$YEAR)
+```
+The chosen local was **L074**, because it is the second place with more observed data. The model for this analysis is represented below:
+
+$$ y = loc + loc/year + gen + gen*year + rainfed + \epsilon  $$ 
+
+```{r}
+library(asreml)
+#Separating the local 74
+df74 <- df |> filter(loc == "L074")
+
+Xmatriz para fazer o X'X e ver como fica'
+
+#model 1 - blocks as fixed
+model1_loc1 <- asreml(fixed = GY ~ rep:YEAR,
+                random = ~ gen ,
+                residual = ~units,
+                data = df74)
+plot(model1_loc1)
+
+#model2 - blocks as random
+model2_loc1 <- asreml(fixed = GY ~ YEAR ,
+                random = ~ rep:YEAR + gen ,
+                residual = ~units,
+                data = df74)
+plot(model2_loc1)
+
+#model 3 
+model3_loc1 <- asreml(fixed = GY ~ rep:YEAR + YEAR + RAINFED + YEAR:RAINFED,
+                random = ~  + gen + gen:YEAR + gen:RAINFED,
+                residual = ~units,
+                data = df74)
+plot(model3_loc1)
+
+# 1. Verificar convergência
+summary(model1_loc1)
+summary(model2_loc1)
+summary(model3_loc1)
+
+# 2. Comparar AIC (menor é melhor)
+summary(model1_loc1)$aic
+summary(model2_loc1)$aic
+summary(model3_loc1)$aic
+
+# 3. Verificar componentes de variância
+summary(model3_loc1)$varcomp
+
+# 4. Extrair BLUPs do Modelo 3 (o mais completo)
+blups_gen <- predict(model3_loc1, classify = "gen")$pvals
+blups_interacao <- predict(model3_loc1, classify = "gen:RAINFED")$pvals
+
+```
+
+## Variance component estimates
+```{r}
+summary(loc_1)$varcomp
+```
+
+## Hypothesis test
+
+```{r}
+wald(loc_1, denDF = 'numeric')$Wald
+```
+There are differences between the results of irrigated genotypes and rainfed genotypes. Also, the p-value for blocking indicates that using blocks was necessary to control heterogeneity.
+
+## Broad-sense heritability estimation
+
+```{r}
+vpredict(loc_1, H2 ~ V1/((V1+V2)/rep))
+```
+
+
+## Coefficient of experimental variation
+
+## BLUPs
+
+```{r}
+blup_loc1 <- summary(loc_1, coef = TRUE)$coef.random
+head(blup_loc1)
+
+blups <- predict(loc_1, classify = "loc:YEAR")
+blups$pvals
+
+# Ver estatísticas resumidas
+summary(blups$pvals$predicted.value)
+
+# Ordenar ambientes por produtividade
+blups$pvals[order(blups$pvals$predicted.value, decreasing = TRUE), ]
+```
+
+
+#Modelo local 2 todos os anos - Renan
+## Variance component estimates
+
+## Hypothesis test
+
+## Broad-sense heritability estimation
+
+## Coefficient of experimental variation
+
+#Modelo ano 1 todos os locais - Bruna
+## Variance component estimates
+
+## Hypothesis test
+
+## Broad-sense heritability estimation
+
+## Coefficient of experimental variation
+
+#Modelo ano 1 todos os locais - Renan
+## Variance component estimates
+
+## Hypothesis test
+
+## Broad-sense heritability estimation
+
+## Coefficient of experimental variation
+
+
+USAR O DF COMO BASE DE DADOS!!! ELE JÁ ESTÁ FILTRADO
+# Trait \#2 - PH
+#Modelo completo - João
+## Variance component estimates
+
+## Hypothesis test
+
+## Broad-sense heritability estimation
+
+## Coefficient of experimental variation
+
+#Modelo local 1 todos os anos - Bruna
+## Variance component estimates
+
+## Hypothesis test
+
+## Broad-sense heritability estimation
+
+## Coefficient of experimental variation
+
+#Modelo local 2 todos os anos - Renan
+## Variance component estimates
+
+## Hypothesis test
+
+## Broad-sense heritability estimation
+
+## Coefficient of experimental variation
+
+#Modelo ano 1 todos os locais - Bruna
+## Variance component estimates
+
+## Hypothesis test
+
+## Broad-sense heritability estimation
+
+## Coefficient of experimental variation
+
+#Modelo ano 1 todos os locais - Renan
+## Variance component estimates
+
+
+# Discussion
+
+
+# Appedix
+
+We evaluated the relationship between 
+
+```{r}
+# Dividir os dados por env e criar lista de tabelas
+resultados <- data |>
+  group_by(env) |>
+  group_split() |>
+  set_names(unique(data$env)) |>
+  map(~ table(.x$rep, .x$gen))
+resultados
+```
+
+
+
+A fazer
+
+- filtrar os outliers do dataframe total para as duas características
+- ajustar o modelo para todos os environments (modelo = $$ y = env + env/bloco + gen + gen*env + irrigação + \epsilon$$) - sendo env, gen e gen*env como aleatório.
+- tabela para mostrar os locais nos anos que escolhemos para fazer (2) - estabilidade/adaptabilidade
+- ajustar o modelo para cada local ao longo dos anos.
+- ajustar o modelo para um ano qual é o melhor local.
+
+
+
+se der tempo: estrutura de covariância entre anos/locais para identificar as correlações entre anos. Quanto mais próximos, maior. Tem covariância entre os anos.
