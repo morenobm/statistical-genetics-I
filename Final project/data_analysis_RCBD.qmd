@@ -38,7 +38,7 @@ knitr::opts_chunk$set(
 #| label: trials-data
 
 # Loading packages
-packages <- c("ggplot2", "patchwork", "tidyr", "dplyr", "purrr", "knitr", "kableExtra", "grid","ggcorrplot")
+packages <- c("ggplot2", "patchwork", "tidyr", "dplyr", "purrr", "knitr", "kableExtra", "grid","ggcorrplot", "asreml")
 invisible(lapply(packages, library, character.only = TRUE))
 
 # Loading phenotypic data (Zambia)
@@ -46,6 +46,8 @@ data = read.csv("https://raw.githubusercontent.com/mauricioaraujj/Pan_African_Tr
 ```
 
 ```{r}
+#| label: outliers_PH
+
 # Para datasets grandes, ajuste o número de bins
 ggplot(data, aes(x = PH_R8)) +
   geom_histogram(bins = 100, fill = "steelblue", alpha = 0.7) +
@@ -76,7 +78,8 @@ p_hist / p_box + plot_layout(heights = c(3, 1))
 ```
 
 ```{r}
-## GY 
+#| label: outliers_GY
+
 # Para datasets grandes, ajuste o número de bins
 ggplot(data, aes(x = GY)) +
   geom_histogram(bins = 100, fill = "steelblue", alpha = 0.7) +
@@ -128,12 +131,6 @@ df$gen <- as.factor(df$gen)
 df$RAINFED <- as.factor(df$RAINFED)
 ```
 
-Add isso
-
-```{r}
-library(asreml)
-```
-
 USAR O DF COMO BASE DE DADOS!!! ELE JÁ ESTÁ FILTRADO
 
 # Exercise
@@ -149,173 +146,84 @@ task must be carried out within groups.
 
 # Introduction
 
-USAR O DF COMO BASE DE DADOS!!! ELE JÁ ESTÁ FILTRADO \# Trait #1 - GY
+Blocos como fixo (poucos blocos) e genotipos como aleatorio (amostras de
+uma possivel populacao dos cruzamentos, recuperacao da info em alguns
+casos de desbalanceamento.
 
-#Modelo completo - João \## Variance component estimates
-
-## Hypothesis test
-
-## Broad-sense heritability estimation
-
-## Coefficient of experimental variation
-
-#Modelo local 1 todos os anos - Bruna \## Variance component estimates
-
-## Hypothesis test
-
-## Broad-sense heritability estimation
-
-## Coefficient of experimental variation
-
-------------------------------------------------------------------------
-
-#Modelo local 2 todos os anos - Renan \## Variance component estimates
-
-Before diving into the mixed models, we selected location L099 for this
-location-specific temporal analysis. Based on the cross-tabulation of
-the trial network, L099 stands out as one of the most consistent
-environments, possessing robust phenotypic data across almost all
-evaluated years, with a single gap in the 2022 season.
+# Trait 1 - GY
 
 ```{r}
-#| label: model-local2-gy
-#| warning: false
-#| message: false
+#| label: GY_analysis
 
-# Local 2 Model (All Years) - L099
+# Lista de ambientes
+envs_list <- unique(as.character(df$env))
 
-# 1. Data Preparation
-df_L099_GY <- df |> 
-  filter(loc == "L099") |> 
-  droplevels()
+# Verificando dados faltantes para GY em cada ENV
+info_env_GH <- df |>
+  group_by(env) |>
+  summarise(
+    obs = n(),
+    NAs = sum(is.na(GY)),
+    .groups = "drop")
 
-# 2. Mixed Model Fitting (by ASReml)
-mod_L099_GY <- asreml(
-  fixed = GY ~ 1 + RAINFED,
-  random = ~ YEAR + YEAR:rep + gen + gen:YEAR,
-  residual = ~ idv(units),
-  data = df_L099_GY,
-  trace = FALSE
-)
-mod_L099_GY <- update(mod_L099_GY)
+
+# Rodando para cada trial isoladamente
+singleTrial_models_GY <- list()
+singleTrial_varcomp_GY <- list()
+singleTrial_blup_GY <- list()
+singleTrial_reliability_GY <- list()
+tabela_geral_GY <- data.frame(env = character(),LRTstat = numeric(),pvalue = numeric(),significance = logical(), h2 = numeric(), cv = numeric(), stringsAsFactors = FALSE)
+
+for (i in envs_list){
+  
+  df_env <- df |> filter(env == i)
+  df_env$gen <- as.factor(df_env$gen)
+  df_env$rep <- as.factor(df_env$rep)
+  i <- as.character(i)
+  
+  model <- asreml(fixed = GY ~ rep,
+                               random = ~ gen ,
+                               data = df_env,
+                               maxit = 100,
+                               na.action = na.method(y=c("omit")))
+
+  varcomp <- summary(model)$varcomp
+  
+  blups <- predict.asreml(model, classify = "gen")$pvals
+  
+  blups <- blups[order(blups$predicted.value, decreasing = TRUE),]
+  
+  reliability <- 1 - (blups$std.error^2/varcomp[1,1])
+  
+  
+  m_red_GY <- asreml(fixed = GY ~ rep,
+                               data = df_env,
+                               maxit = 100,
+                               na.action = na.method(y=c("omit")))
+  
+  pval <- lrt.asreml(model, m_red_GY, boundary = T)
+  
+  
+  h2 <- vpredict(model, H2 ~ V1/(V1+V2))
+  cv <- sqrt(varcomp[2,1])/mean(df_env$GY, na.rm=T)
+  
+  tabela_geral_GY <- rbind(tabela_geral_GY,
+    data.frame(
+      env = i,
+      LRTstat = round(pval$`LR-statistic`,digits=3),
+      pvalue = round(pval$`Pr(Chisq)`,digits=4) ,
+      significance = pval$`Pr(Chisq)` < 0.05,
+      h2 = round(h2$Estimate,digits=4),
+      cv = round((cv*100),digits=2)))
+  
+  singleTrial_models_GY[[i]] <- model
+  singleTrial_varcomp_GY[[i]] <- varcomp
+  singleTrial_blup_GY[[i]] <- blups
+  singleTrial_reliability_GY[[i]] <- reliability
+  }
 ```
-
-#RAINFED do modelo do L099?? será que o Rainfed é o melhor como efeito
-fixo???; bloco aleatório?
-
-## Hypothesis test
-
-```{r}
-#| label: var-test-local2-gy
 
 ## Variance component estimates
-print("Variance Components (Location L099 - GY):")
-summary(mod_L099_GY)$varcomp
-
-## Hypothesis test
-print("Wald Test for Fixed Effect (RAINFED):")
-wald.asreml(mod_L099_GY)
-
-# LRT for Genotypic Effect
-mod_L099_GY_reduced <- asreml(
-  fixed = GY ~ 1 + RAINFED,
-  random = ~ YEAR + YEAR:rep + gen:YEAR,
-  residual = ~ idv(units),
-  data = df_L099_GY,
-  trace = FALSE
-)
-print("LRT for Genotypic Variance:")
-lrt(mod_L099_GY, mod_L099_GY_reduced)
-```
-
-The Wald test indicated that the water regime (RAINFED) had no
-significant effect (p = 0.25) on grain yield at the L099 location.
-Furthermore, the variance components revealed a massive Genotype
-$\times$ Year interaction variance (174,271), which was over five times
-larger than the genotypic variance (31,247). Consequently, the main
-genotypic effect was not significant in the LRT (p = 0.24),
-demonstrating that climatic fluctuations across seasons heavily dictate
-cultivar performance and cause severe rank changes over time.
-
-## Broad-sense heritability estimation & Coefficient of experimental variation
-
-```{r}
-#| label: metrics-local2-gy
-
-## Broad-sense heritability estimation
-n_years_L099 <- length(levels(df_L099_GY$YEAR))
-
-reps_per_year_L099 <- df_L099_GY |> 
-  group_by(YEAR) |> 
-  summarise(n = n_distinct(rep))
-n_rep_mean_L099 <- mean(reps_per_year_L099$n)
-
-vc_L099 <- summary(mod_L099_GY)$varcomp
-vg_L099  <- vc_L099["gen", "component"]
-vga_L099 <- vc_L099["gen:YEAR", "component"]
-ve_L099  <- vc_L099["units!units", "component"]
-
-# Heritability 
-h2_L099_manual <- vg_L099 / (vg_L099 + (vga_L099 / n_years_L099) + (ve_L099 / (n_years_L099 * n_rep_mean_L099)))
-
-print(paste("Broad-sense Heritability (H2):", round(h2_L099_manual, 4)))
-
-## Coefficient of experimental variation
-var_res_L099_real <- vc_L099["units!units", "component"]
-mean_GY_L099 <- mean(df_L099_GY$GY, na.rm = TRUE)
-
-cve_L099 <- (sqrt(var_res_L099_real) / mean_GY_L099) * 100
-cat("Coefficient of Experimental Variation (CVe):", round(cve_L099, 2), "%\n")
-```
-
-The coefficient of experimental variation (CVe) was 18.57%,
-demonstrating excellent experimental precision for grain yield trials.
-Broad-sense heritability was estimated at 0.31, a moderate-to-low value
-that directly reflects the strong influence of the Genotype $\times$
-Year interaction, confirming that climatic variation across seasons at
-L099 heavily masks the pure genetic expression of the cultivars.
-
-```{r}
-#| label: blups-local2-gy
-
-## BLUPs and Predicted Means Extraction
-pred_L099 <- predict(mod_L099_GY, classify = "gen")
-predicted_means <- pred_L099$pvals
-
-## Extracting Pure Random Effects (To get the correct BLUP Standard Error)
-random_effects <- summary(mod_L099_GY, coef = TRUE)$coef.random |> 
-  as.data.frame() |> 
-  tibble::rownames_to_column("Term") |> 
-  filter(grepl("^gen_", Term)) |> 
-  mutate(gen = gsub("gen_", "", Term)) |> 
-  rename(SE_BLUP = std.error) |> 
-  select(gen, SE_BLUP)
-
-## Genetic Variance
-vg_L099 <- summary(mod_L099_GY)$varcomp["gen", "component"]
-
-## Merging and calculating True Reliability
-blups_L099_Final <- predicted_means |> 
-  left_join(random_effects, by = "gen") |> 
-  mutate(Reliability = 1 - (SE_BLUP^2 / vg_L099)) |> 
-  select(gen, predicted.value, SE_BLUP, status, Reliability) |> 
-  arrange(desc(predicted.value))
-
-print("Top 10 Genotypes (Predicted Means and Corrected Reliability):")
-head(blups_L099_Final, 10) |> 
-  knitr::kable(digits = 3)
-```
-
-Genotypic predictions (BLUPs) revealed that materials G068, G319, and
-G092 showed the highest yield potential for the L099 location. The
-reliabilities of these predictions ranged from 0.10 to 0.25. These
-values reflect the high Genotype $\times$ Year interaction variance,
-indicating that the recommendation of these cultivars must account for
-strong climatic fluctuations between seasons (across years)
-
-------------------------------------------------------------------------
-
-#Modelo ano 1 todos os locais - Bruna \## Variance component estimates
 
 ## Hypothesis test
 
@@ -323,511 +231,89 @@ strong climatic fluctuations between seasons (across years)
 
 ## Coefficient of experimental variation
 
-------------------------------------------------------------------------
-
-#Modelo ano 1 todos os locais - Renan \## Variance component estimates
-
-## Hypothesis test
-
-## Broad-sense heritability estimation
-
-## Coefficient of experimental variation
-
-To evaluate spatial stability, we selected the 2023, which presented the
-broadest geographical coverage in the dataset (8 active trial
-locations). Prior to fitting the spatial model, we assessed the trial
-network's connectivity to avoid highly unbalanced estimations. The
-dataset demonstrated balance: out of 30 evaluated genotypes, 28 were
-concurrently tested across all 8 locations.
+# Trait 2 - PH  
 
 ```{r}
-#| label: model-year1-gy
-#| warning: false
-#| message: false
+#| label: PH_analysis
 
-# 1. Data Preparation
-# Filtering the main dataset for 2023 and dropping unused levels.
-df_2023_GY <- df |> 
-  filter(YEAR == "2023") |> 
-  droplevels()
+# Removendo ambientes com nenhuma observação
+df <- df |> filter(!env %in% c("E0171","E0172","E0225"))
+envs_list <- envs_list[!envs_list %in% c("E0171","E0172","E0225")]
 
-# 2. Mixed Model Fitting 
-mod_2023_GY <- asreml(
-  fixed = GY ~ 1 + RAINFED,
-  random = ~ loc + loc:rep + gen + gen:loc,
-  residual = ~ idv(units),
-  data = df_2023_GY,
-  trace = FALSE
-)
+# Verificando dados faltantes para PH em cada ENV
+info_env_PH <- df |>
+  group_by(env) |>
+  summarise(
+    obs = n(),
+    NAs = sum(is.na(PH_R8)),
+    .groups = "drop")
 
-# Ensuring variance convergence
-mod_2023_GY <- update(mod_2023_GY)
+# Rodando para cada trial isoladamente
+singleTrial_models_PH <- list()
+singleTrial_varcomp_PH <- list()
+singleTrial_blup_PH <- list()
+singleTrial_reliability_PH <- list()
+tabela_geral_PH <- data.frame(env = character(),LRTstat = numeric(),pvalue = numeric(),significance = logical(), h2 = numeric(), cv = numeric(), stringsAsFactors = FALSE)
+
+for (i in envs_list){
+  
+  df_env <- df |> filter(env == i)
+  df_env$gen <- as.factor(df_env$gen)
+  df_env$rep <- as.factor(df_env$rep)
+  i <- as.character(i)
+  
+  model <- asreml(fixed = PH_R8 ~ rep,
+                               random = ~ gen ,
+                               data = df_env,
+                               maxit = 100,
+                               na.action = na.method(y=c("omit")))
+
+  varcomp <- summary(model)$varcomp
+  
+  blups <- predict.asreml(model, classify = "gen")$pvals
+  
+  blups <- blups[order(blups$predicted.value, decreasing = TRUE),]
+  
+  reliability <- 1 - (blups$std.error^2/varcomp[1,1])
+  
+  
+  m_red_PH <- asreml(fixed = PH_R8 ~ rep,
+                               data = df_env,
+                               maxit = 100,
+                               na.action = na.method(y=c("omit")))
+  
+  pval <- lrt.asreml(model, m_red_PH, boundary = T)
+  
+  
+  h2 <- vpredict(model, H2 ~ V1/(V1+V2))
+  cv <- sqrt(varcomp[2,1])/mean(df_env$PH, na.rm=T)
+  
+  tabela_geral_PH <- rbind(tabela_geral_PH,
+    data.frame(
+      env = i,
+      LRTstat = round(pval$`LR-statistic`,digits=3),
+      pvalue = round(pval$`Pr(Chisq)`,digits=4) ,
+      significance = pval$`Pr(Chisq)` < 0.05,
+      h2 = round(h2$Estimate,digits=4),
+      cv = round((cv*100),digits=2)))
+  
+  singleTrial_models_PH[[i]] <- model
+  singleTrial_varcomp_PH[[i]] <- varcomp
+  singleTrial_blup_PH[[i]] <- blups
+  singleTrial_reliability_PH[[i]] <- reliability
+  }
 ```
-
-For this single-year spatial analysis, the trial locations represent the
-distinct environmental conditions. We fitted a mixed model treating the
-management regime (RAINFED) as a fixed effect, while the 8 locations,
-experimental repetitions, and genotypes were treated as random effects.
-This structure allows us to model the spatial environmental noise and
-accurately isolate the Genotype $\times$ Location variance to identify
-the most geographically stable cultivars.
-
-## Hypothesis test
-
-```{r}
-#| label: var-test-year1-gy
 
 ## Variance component estimates
-print("Variance Components (Year 2023 - GY):")
-summary(mod_2023_GY)$varcomp
-
-## Hypothesis test
-print("Wald Test for Fixed Effect (RAINFED):")
-wald.asreml(mod_2023_GY)
-
-# LRT for Genotypic Effect
-mod_2023_GY_reduced <- asreml(
-  fixed = GY ~ 1 + RAINFED,
-  random = ~ loc + loc:rep + gen:loc,
-  residual = ~ idv(units),
-  data = df_2023_GY,
-  trace = FALSE
-)
-print("LRT for Genotypic Variance:")
-lrt(mod_2023_GY, mod_2023_GY_reduced)
-```
-
-The Wald test indicated that the water management regime (RAINFED) had a
-highly significant effect (p \< 0.001) on grain yield across the
-evaluated locations in 2023. Furthermore, the variance components
-revealed a massive Genotype $\times$ Location interaction variance
-(176,858.86), nearly four times larger than the pure genotypic variance
-(47,547.28). Despite this spatial environmental influence causing rank
-changes among sites, the Likelihood Ratio Test (LRT) confirmed that the
-main genotypic effect remained highly significant (p \< 0.001),
-indicating a strong and selectable genetic contribution to yield across
-the trial network.
-
-## Broad-sense heritability estimation & Coefficient of experimental variation
-
-```{r}
-#| label: metrics-year1-gy
-
-## Broad-sense heritability estimation
-n_locs_2023 <- length(levels(df_2023_GY$loc))
-
-reps_per_loc_2023 <- df_2023_GY |> 
-  group_by(loc) |> 
-  summarise(n = n_distinct(rep))
-n_rep_mean_2023 <- mean(reps_per_loc_2023$n)
-
-# Extracting components by name
-vc_2023 <- summary(mod_2023_GY)$varcomp
-vg_2023  <- vc_2023["gen", "component"]
-vgl_2023 <- vc_2023["gen:loc", "component"]
-ve_2023  <- vc_2023["units!units", "component"]
-
-h2_2023_manual <- vg_2023 / (vg_2023 + (vgl_2023 / n_locs_2023) + (ve_2023 / (n_locs_2023 * n_rep_mean_2023)))
-
-print(paste("Broad-sense Heritability (H2) for 2023:", round(h2_2023_manual, 4)))
-
-## Coefficient of experimental variation
-var_res_2023_real <- vc_2023["units!units", "component"]
-mean_GY_2023 <- mean(df_2023_GY$GY, na.rm = TRUE)
-
-cve_2023 <- (sqrt(var_res_2023_real) / mean_GY_2023) * 100
-cat("Coefficient of Experimental Variation (CVe):", round(cve_2023, 2), "%\n")
-```
-
-The coefficient of experimental variation (CVe) was 20.36%, indicating
-an acceptable and typical level of experimental precision for
-multi-environment field trials evaluating grain yield. Broad-sense
-heritability was estimated at 0.56. This metric corroborates the highly
-significant genotypic effect observed in the Likelihood Ratio Test,
-demonstrating that despite the considerable Genotype $\times$ Location
-interaction, the pure genetic variance is robust enough to allow for
-reliable selection of superior and spatially stable cultivars across
-trial network.
-
-```{r}
-#| label: blups-year1-gy
-
-## BLUPs and Predicted Means Extraction
-pred_2023 <- predict(mod_2023_GY, classify = "gen")
-predicted_means_2023 <- pred_2023$pvals
-
-random_effects_2023 <- summary(mod_2023_GY, coef = TRUE)$coef.random |> 
-  as.data.frame() |> 
-  tibble::rownames_to_column("Term") |> 
-  filter(grepl("^gen_", Term)) |> 
-  mutate(gen = gsub("gen_", "", Term)) |> 
-  rename(SE_BLUP = std.error) |> 
-  select(gen, SE_BLUP)
-
-## Merging and calculating True Reliability
-blups_2023_Final <- predicted_means_2023 |> 
-  left_join(random_effects_2023, by = "gen") |> 
-  mutate(Reliability = 1 - (SE_BLUP^2 / vg_2023)) |> 
-  select(gen, predicted.value, SE_BLUP, status, Reliability) |> 
-  arrange(desc(predicted.value))
-
-print("Top 10 Genotypes (2023 Spatial Stability):")
-head(blups_2023_Final, 10) |> 
-  knitr::kable(digits = 3)
-```
-
-Genotypic predictions (BLUPs) identified G137 as the standout cultivar,
-demonstrating the highest spatial stability and yield potential across
-the 2023 trial network, followed by G335 and G359. The reliabilities of
-these predictions were robust, stabilizing around 0.53 to 0.54. These
-values are substantially higher than those observed in the
-single-location temporal model, reflecting the strong broad-sense
-heritability (0.56) and confirming that these specific genotypes
-maintain superior, reliable performance across diverse geographical
-environments despite the spatial Genotype $\times$ Location interaction.
-
-is:
-
-```{r}
-1 + 1
-```
-
-------------------------------------------------------------------------
-
-USAR O DF COMO BASE DE DADOS!!! ELE JÁ ESTÁ FILTRADO \# Trait #2 - PH
-#Modelo completo - João \## Variance component estimates
 
 ## Hypothesis test
 
 ## Broad-sense heritability estimation
 
 ## Coefficient of experimental variation
-
-#Modelo local 1 todos os anos - Bruna \## Variance component estimates
-
-## Hypothesis test
-
-## Broad-sense heritability estimation
-
-## Coefficient of experimental variation
-
-#Modelo local 2 todos os anos - Renan \## Variance component estimates
-
-```{r}
-#| label: model-local2-ph
-#| warning: false
-#| message: false
-
-# Local 2 Model (All Years) - L099
-
-# 1. Data Preparation
-df_L099_PH <- df |> 
-  filter(loc == "L099") |> 
-  filter(!is.na(PH_R8)) |> # Removing NAs specifically for PH_R8
-  droplevels()
-
-# 2. Mixed Model Fitting (ASReml)
-mod_L099_PH <- asreml(
-  fixed = PH_R8 ~ 1 + RAINFED,
-  random = ~ YEAR + YEAR:rep + gen + gen:YEAR,
-  residual = ~ idv(units),
-  data = df_L099_PH,
-  trace = FALSE
-)
-
-# Ensures absolute variance convergence
-mod_L099_PH <- update(mod_L099_PH)
-```
-
-## Hypothesis test
-
-```{r}
-#| label: var-test-local2-ph
-
-## Variance component estimates
-print("Variance Components (Location L099 - PH_R8):")
-summary(mod_L099_PH)$varcomp
-
-## Hypothesis test
-print("Wald Test for Fixed Effect (RAINFED):")
-wald.asreml(mod_L099_PH)
-
-# LRT for Genotypic Effect
-mod_L099_PH_reduced <- asreml(
-  fixed = PH_R8 ~ 1 + RAINFED,
-  random = ~ YEAR + YEAR:rep + gen:YEAR,
-  residual = ~ idv(units),
-  data = df_L099_PH,
-  trace = FALSE
-)
-print("LRT for Genotypic Variance (PH_R8):")
-lrt(mod_L099_PH, mod_L099_PH_reduced)
-```
-
-The Wald test indicated that the water management regime (RAINFED) had a
-highly significant effect (p \< 0.001) on final plant height (PH_R8) at
-the L099 local. However, the most striking contrast is in the variance
-components, unlike GY, which was heavily dominated by temporal
-environmental fluctuations, the pure genotypic variance for plant height
-(65.72) was nearly twelve times larger than the Genotype $\times$ Year
-interaction variance (5.62). Consequently, the Likelihood Ratio Test
-(LRT) confirmed a significant main genotypic effect (p \< 0.001). This
-demonstrates that plant height possesses a genetic stability and
-temporal, making it significantly less susceptible to seasonal climatic
-variations than yield.
-
-## Broad-sense heritability estimation & Coefficient of experimental variation
-
-```{r}
-#| label: metrics-local2-ph
-
-## Broad-sense heritability estimation
-n_years_L099_PH <- length(levels(df_L099_PH$YEAR))
-
-reps_per_year_L099_PH <- df_L099_PH |> 
-  group_by(YEAR) |> 
-  summarise(n = n_distinct(rep))
-n_rep_mean_L099_PH <- mean(reps_per_year_L099_PH$n)
-
-# Extracting components
-vc_L099_PH <- summary(mod_L099_PH)$varcomp
-vg_L099_PH  <- vc_L099_PH["gen", "component"]
-vga_L099_PH <- vc_L099_PH["gen:YEAR", "component"]
-ve_L099_PH  <- vc_L099_PH["units!units", "component"]
-
-# Heritability Formula
-h2_L099_PH <- vg_L099_PH / (vg_L099_PH + (vga_L099_PH / n_years_L099_PH) + (ve_L099_PH / (n_years_L099_PH * n_rep_mean_L099_PH)))
-
-print(paste("Broad-sense Heritability (H2) for PH_R8:", round(h2_L099_PH, 4)))
-
-## Coefficient of experimental variation
-mean_PH_L099 <- mean(df_L099_PH$PH_R8, na.rm = TRUE)
-
-cve_L099_PH <- (sqrt(ve_L099_PH) / mean_PH_L099) * 100
-cat("Coefficient of Experimental Variation (CVe):", round(cve_L099_PH, 2), "%\n")
-```
-
-The coefficient of experimental variation (CVe) was 12.74%,
-demonstrating excellent experimental precision and indicating that plant
-height measurements were less prone to residual field noise compared to
-GY. Furthermore, the broad-sense heritability reached an impressive
-0.84. This high heritability value perfectly corroborates the variance
-components, confirming that the vast majority of the phenotypic
-variation observed for plant height is under strict genetic control.
-Unlike yield, which proved to be environmentally dependent, plant height
-exhibits massive temporal stability. This guarantees that phenotypic
-selection for this trait at the L099 location will be highly effective,
-precise, and easily reproducible across different growing seasons.
-
-```{r}
-#| label: blups-local2-ph
-
-## BLUPs and Predicted Means Extraction
-pred_L099_PH <- predict(mod_L099_PH, classify = "gen")
-predicted_means_PH <- pred_L099_PH$pvals
-
-## Extracting Pure Random Effects
-random_effects_PH <- summary(mod_L099_PH, coef = TRUE)$coef.random |> 
-  as.data.frame() |> 
-  tibble::rownames_to_column("Term") |> 
-  filter(grepl("^gen_", Term)) |> 
-  mutate(gen = gsub("gen_", "", Term)) |> 
-  rename(SE_BLUP = std.error) |> 
-  select(gen, SE_BLUP)
-
-## Merging and calculating True Reliability
-blups_L099_PH_Final <- predicted_means_PH |> 
-  left_join(random_effects_PH, by = "gen") |> 
-  mutate(Reliability = 1 - (SE_BLUP^2 / vg_L099_PH)) |> 
-  select(gen, predicted.value, SE_BLUP, status, Reliability) |> 
-  arrange(desc(predicted.value))
-
-print("Top 10 Genotypes (Plant Height - L099):")
-head(blups_L099_PH_Final, 10) |> 
-  knitr::kable(digits = 3)
-```
-
-The Genotypic predictions (BLUPs) for plant height identified G310,
-G321, and G114 as the tallest cultivars at the L099 location. As
-anticipated by the high broad-sense heritability, the reliabilities of
-these predictions were remarkably high, reaching up to 0.77. These
-values are superior to those observed for GY within the same temporal
-network. This unequivocally confirms that selecting for plant height is
-a highly efficient and reliable process, as the true genetic potential
-of these cultivars is clearly expressed and minimally confounded by
-seasonal climatic fluctuations
-
-```{r}
-1 + 1
-```
-
-## Hypothesis test
-
-## Broad-sense heritability estimation
-
-## Coefficient of experimental variation
-
-#Modelo ano 1 todos os locais - Bruna \## Variance component estimates
-
-## Hypothesis test
-
-## Broad-sense heritability estimation
-
-## Coefficient of experimental variation
-
-#Modelo ano 1 todos os locais - Renan \## Variance component estimates
-
-2023
-
-```{r}
-#| label: model-year1-ph
-#| warning: false
-#| message: false
-
-
-# Year 2023, all locals | Trait: PH_R8 (Plant Height)
-
-# 1. Data Preparation
-df_2023_PH <- df |> 
-  filter(YEAR == "2023") |> 
-  filter(!is.na(PH_R8)) |> 
-  droplevels()
-
-# 2. Mixed Model Fitting (ASReml)
-mod_2023_PH <- asreml(
-  fixed = PH_R8 ~ 1 + RAINFED,
-  random = ~ loc + loc:rep + gen + gen:loc,
-  residual = ~ idv(units),
-  data = df_2023_PH,
-  trace = FALSE
-)
-
-mod_2023_PH <- update(mod_2023_PH)
-```
-
-```{r}
-#| label: var-test-year1-ph
-
-## Variance component estimates
-print("Variance Components (Year 2023 - PH_R8):")
-summary(mod_2023_PH)$varcomp
-
-## Hypothesis test
-print("Wald Test for Fixed Effect (RAINFED):")
-wald.asreml(mod_2023_PH)
-
-# LRT for Genotypic Effect
-mod_2023_PH_reduced <- asreml(
-  fixed = PH_R8 ~ 1 + RAINFED,
-  random = ~ loc + loc:rep + gen:loc,
-  residual = ~ idv(units),
-  data = df_2023_PH,
-  trace = FALSE
-)
-print("LRT for Genotypic Variance (PH_R8):")
-lrt(mod_2023_PH, mod_2023_PH_reduced)
-```
-
-The Wald test indicated that the RAINFED had a significant effect (p \<
-0.001) on plant height across the 2023 trial network. However, the
-variance components once again highlighted the robust genetic
-determinism of this trait. In stark contrast to the spatial model for
-grain yield, the pure genotypic variance for plant height (58.27) was
-more than five times larger than the spatial interaction variance
-(11.14). Consequently, the Likelihood Ratio Test (LRT) confirmed a
-highly significant main genotypic effect (p \< 0.001). This proves that
-plant height is exceptionally stable across different geographical
-environments, allowing cultivars to maintain their intrinsic height
-rankings regardless of the trial location.
-
-```{r}
-#| label: metrics-year1-ph
-
-## Broad-sense heritability estimation
-n_locs_2023_PH <- length(levels(df_2023_PH$loc))
-
-reps_per_loc_2023_PH <- df_2023_PH |> 
-  group_by(loc) |> 
-  summarise(n = n_distinct(rep))
-n_rep_mean_2023_PH <- mean(reps_per_loc_2023_PH$n)
-
-# Extracting components
-vc_2023_PH <- summary(mod_2023_PH)$varcomp
-vg_2023_PH  <- vc_2023_PH["gen", "component"]
-vgl_2023_PH <- vc_2023_PH["gen:loc", "component"]
-ve_2023_PH  <- vc_2023_PH["units!units", "component"]
-
-# Heritability Formula
-h2_2023_PH <- vg_2023_PH / (vg_2023_PH + (vgl_2023_PH / n_locs_2023_PH) + (ve_2023_PH / (n_locs_2023_PH * n_rep_mean_2023_PH)))
-
-print(paste("Broad-sense Heritability (H2) for 2023 PH_R8:", round(h2_2023_PH, 4)))
-
-## Coefficient of experimental variation
-var_res_2023_PH_real <- vc_2023_PH["units!units", "component"]
-mean_PH_2023 <- mean(df_2023_PH$PH_R8, na.rm = TRUE)
-
-cve_2023_PH <- (sqrt(var_res_2023_PH_real) / mean_PH_2023) * 100
-cat("Coefficient of Experimental Variation (CVe):", round(cve_2023_PH, 2), "%\n")
-```
-
-The coefficient of experimental variation (CVe) was remarkably low at
-10.94%, demonstrating outstanding experimental precision across the
-multi-environment network. Furthermore, the broad-sense heritability
-reached the 0.93. This near-perfect heritability metric aligns
-flawlessly with the variance components, confirming that over 90% of the
-phenotypic variation observed for plant height across the Zambian
-locations is driven by genetics rather than spatial environmental
-differences.
-
-```{r}
-#| label: blups-year1-ph
-
-## BLUPs and Predicted Means Extraction
-pred_2023_PH <- predict(mod_2023_PH, classify = "gen")
-predicted_means_2023_PH <- pred_2023_PH$pvals
-
-## Extracting Pure Random Effects
-random_effects_2023_PH <- summary(mod_2023_PH, coef = TRUE)$coef.random |> 
-  as.data.frame() |> 
-  tibble::rownames_to_column("Term") |> 
-  filter(grepl("^gen_", Term)) |> 
-  mutate(gen = gsub("gen_", "", Term)) |> 
-  rename(SE_BLUP = std.error) |> 
-  select(gen, SE_BLUP)
-
-## Merging and calculating True Reliability
-blups_2023_PH_Final <- predicted_means_2023_PH |> 
-  left_join(random_effects_2023_PH, by = "gen") |> 
-  mutate(Reliability = 1 - (SE_BLUP^2 / vg_2023_PH)) |> 
-  select(gen, predicted.value, SE_BLUP, status, Reliability) |> 
-  arrange(desc(predicted.value))
-
-print("Top 10 Genotypes (2023 Spatial Stability - PH_R8):")
-head(blups_2023_PH_Final, 10) |> 
-  knitr::kable(digits = 3)
-```
-
-The BLUPs across the 2023 spatial network identified G321 and G146 as
-the significantly tallest cultivars. As perfectly anticipated by the
-near-perfect broad-sense heritability, the reliabilities of these BLUPs
-were exceptionally high, stabilizing between 0.88 and 0.92. These values
-outperform the reliabilities observed for grain yield within the exact
-same spatial network (which hovered around 0.53).
 
 # Discussion
 
-A fazer
+\
 
--   filtrar os outliers do dataframe total para as duas características
--   ajustar o modelo para todos os environments (modelo =
-    $$ y = env + env/bloco + gen + gen*env + irrigação + \epsilon$$) -
-    sendo env, gen e gen\*env como aleatório.
--   tabela para mostrar os locais nos anos que escolhemos para
-    fazer (2) - estabilidade/adaptabilidade
--   ajustar o modelo para cada local ao longo dos anos.
--   ajustar o modelo para um ano qual é o melhor local.
-
-se der tempo: estrutura de covariância entre anos/locais para
-identificar as correlações entre anos. Quanto mais próximos, maior. Tem
-covariância entre os anos.
-
+\
