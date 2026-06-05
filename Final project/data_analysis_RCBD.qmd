@@ -146,11 +146,15 @@ task must be carried out within groups.
 
 # Introduction
 
-Blocos como fixo (poucos blocos) e genotipos como aleatorio (amostras de
-uma possivel populacao dos cruzamentos, recuperacao da info em alguns
-casos de desbalanceamento.
+This report provides a data analysis of a multi-environment soybean breeding in Zambia dataset, focusing on two agronomic traits **Grain Yield** and **Plant Height**. Utilizing a Randomized Complete Block Design (RCBD) framework, all of the 33 individual trials were evaluated through mixed model methodology. Beyond estimation of  variance components, statistical hypothesis tests, and experimental quality were audited using broad-sense heritability ($H^{2}$) and the coefficient of variation (CV%). Furthermore, selected candidates were evaluated based on their Best Linear Unbiased Predictions (BLUPs) and respective reliability values. Finally,  a cross-trial ranking comparison is presented, providing a critical speculation on the underlying genetic and environmental factors that govern the differences or similarities in genotype performance across locations.
 
 # Trait 1 - GY
+
+Our dataset comprised 33 trials conducted in Zambia. The experiments were arranged in a Randomized Complete Block Design (RCBD) with 3 blocks and approximately 30 genotypes per trial. Not all genotypes were present across all trials. Furthermore, because some experiments had missing plots over the course of the evaluation, we implemented the following mixed model:
+$$y_{ij}=b_{j}+g_{i}+e_{ij}$$
+Where:
+$b_{j}$ was considered a fixed effect because there are only 3 blocks within each experiment.
+$g_{i}$ was considered a random effect, where $g_i \sim N(0, \sigma^2_g)$, since the genotypes are samples from a larger breeding population. Additionally, modeling genotypes as random allowed us to recover information and account for the unbalanced nature of the data.
 
 ```{r}
 #| label: GY_analysis
@@ -223,18 +227,185 @@ for (i in envs_list){
   }
 ```
 
-## Variance component estimates
+# Summary of Grain Yield Model Analysis 
 
-## Hypothesis test
+```{r}
+#| label: tbl-gy
+#| tbl-cap: Summary 33 soybean breeding trials in Zambia evaluating Grain Yield (GY)
 
-## Broad-sense heritability estimation
+tabela_geral_GY |> 
+  mutate(significance = case_when(
+    `pvalue` < 0.01 ~ "**",
+    `pvalue` < 0.05 ~ "*",
+    TRUE             ~ "ns" 
+  )) |> 
+  kable(
+    align = "c",
+    col.names = c(
+      "Trial", 
+      "LRT statistic", 
+      "p-value", 
+      "Significance", 
+      "Broad-sense heritability (H²)", 
+      "Coefficient of Variation (%)"
+    )
+  ) |> 
+  kable_styling(bootstrap_options = "striped", full_width = TRUE) |> 
+  footnote(
+    general = c("* - p < 0.05 (5%);", "** - p < 0.01 (1%);", "ns - non-significant."),
+    general_title = "Significance levels: ")
 
-## Coefficient of experimental variation
 
-# Trait 2 - PH  
+```
+
+For Grain Yield (GY) it is visible that the trials `E0108`, `E0174`, `E0175`, `E0224`, `E0280`, and `E0285` did not present variance difference, that is, the test did not rejected $H_0$ which means the genetic variance is equal to zero.
+
+# BLUPs and Reability
+
+In this section we can observe the predicted value of each genotype in each trial individually. There are some environments that have more genotypes or different genotypes. Also, observing the standard errors it is possible to identify what trials are unbalanced.
+
+```{r}
+#| label: tbl-GY-blup-table
+#| tbl-cap: Predicted values of Grain Yield (kg/ha) and standard errors for grain yield of soybean breeding genotypes evaluated across 33 trials in Zambia.
+
+selected_trials <- names(singleTrial_blup_GY)
+tabela_grande <- singleTrial_blup_GY[selected_trials] |> 
+  map(~ .x |> select(gen, predicted.value, std.error)) |>
+  reduce(full_join, by = "gen")
+
+colunas_valores <- rep(c("Predicted value", "Stand. error"), length(selected_trials))
+
+tabela_grande |> 
+  kable(
+    align = "c",
+    col.names = c("Genotype", colunas_valores)
+  ) |> 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE) |> 
+  add_header_above(c(" " = 1, setNames(rep(2, length(selected_trials)), selected_trials))) |> 
+  scroll_box(width = "100%", height = "600px")
+
+```
+
+As shown in @top-genotypes-gy, filtering for trials with a CV under 30% and positive genetic variance resulted in the selection of 20 out of 33 trials. This high retention rate reflects the overall experimental quality of the breeding program.
+
+```{r}
+#| label: tbl-top-genotypes-gy
+#| tbl-cap-location: top
+#| tbl-cap: Predicted value of the top five soybean breeding genotypes ranked (1 to 5) in each trial in Zambia 
+
+low_cv_envs <- tabela_geral_GY |> 
+  select(env, h2, cv, significance) |> 
+  filter(significance == "TRUE" & cv < 30) |> 
+  arrange(cv)
+
+envs <- low_cv_envs$env
+
+genotipos_repetidos <- singleTrial_blup_GY[envs] |> 
+  map_dfr(~ .x |> arrange(desc(predicted.value)) |> head(5) |> select(gen)) |> 
+  count(gen) |> 
+  filter(n > 1) |> 
+  pull(gen) |> 
+  as.character()
+
+set.seed(42) 
+cores_paleta <- hcl.colors(length(genotipos_repetidos), palette = "Earth") |> 
+  paste0("80") 
+mapa_cores <- setNames(cores_paleta, genotipos_repetidos)
+
+tabela_longa <- envs |> 
+  set_names() |> 
+  map_dfr(~ {
+    singleTrial_blup_GY[[.x]] |>  
+      arrange(desc(predicted.value)) |>   
+      head(5) |> 
+      select(gen, predicted.value) |> 
+      mutate(
+        rank = c("1st", "2nd", "3rd", "4th", "5th"),
+        gen = as.character(gen)
+      )
+  }, .id = "env")
+
+tabela_larga <- tabela_longa |> 
+  pivot_wider(
+    id_cols = env, 
+    names_from = rank, 
+    values_from = c(gen, predicted.value),
+    names_glue = "{rank}_{.value}" 
+  ) |> 
+  select(
+    env,
+    `1st_gen`, `1st_predicted.value`,
+    `2nd_gen`, `2nd_predicted.value`,
+    `3rd_gen`, `3rd_predicted.value`,
+    `4th_gen`, `4th_predicted.value`,
+    `5th_gen`, `5th_predicted.value`
+  )
+
+sub_colunas <- c("Trial", rep(c("Genotype", "Predicted value"), 5))
+
+tabela_final <- kbl(tabela_larga, align = "c", col.names = sub_colunas) |> 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE) |> 
+  add_header_above(c(" " = 1, "1st" = 2, "2nd" = 2, "3rd" = 2, "4th" = 2, "5th" = 2))
+
+colunas_indices <- c(2, 4, 6, 8, 10)
+
+for (col in colunas_indices) {
+  valores_coluna <- as.character(tabela_larga[[col]])
+
+  marcar_negrito <- valores_coluna %in% genotipos_repetidos
+  
+  cores_fundo <- ifelse(marcar_negrito, mapa_cores[valores_coluna], "transparent")
+  cores_fundo[is.na(cores_fundo)] <- "transparent"
+  
+  tabela_final <- tabela_final |> 
+    column_spec(
+      column = col, 
+      bold = marcar_negrito,
+      background = cores_fundo
+    )
+}
+
+tabela_final
+```
+
+```{r}
+#| label: tbl-freq-top-five
+#| tbl-cap: Frequency of each genotype in the top five genotypes in each trial
+
+# How many times a genotype appears in the table
+frequencia_geral <- tabela_larga |>
+  select(env, ends_with("_gen")) |> 
+  pivot_longer(cols = ends_with("_gen"), values_to = "genotipo") |> 
+  # Conta apenas quantas vezes o genótipo aparece no total
+  count(genotipo, name = "total_ambientes") |> 
+  arrange(desc(total_ambientes))
+
+kable(frequencia_geral,
+      col.names = c("Genotype", "Frequency")) |> 
+kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+```
+
+The top two genotypes with the highest frequency of occurrence behave differently across the trials. Genotype `G092` exhibits a constant predicted value, whereas genotype `G223` shows variable performance. Despite both being top-ranked, their distinct predicted values across trials indicate genotype-by-environment (GxE) interactions that were not captured in this report.
+
+```{r}
+G233 <- tabela_longa |> select (gen, env, rank, predicted.value) |> filter(gen == "G233" ) |> arrange(rank)
+kable(G233,
+      align = "c",
+      col.names = c("Genotype","Environment", "Rank position", "Predicted value")) |> 
+kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+
+G092 <- tabela_longa |> select (gen, env, rank, predicted.value) |> filter(gen == "G092" ) |> arrange(rank)
+kable(G092,
+      align = "c",
+      col.names = c("Genotype","Environment", "Rank position", "Predicted value")) |> 
+kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+```
+
+# Trait 2 - Plant Height (PH)  
 
 ```{r}
 #| label: PH_analysis
+#| output: false
 
 # Removendo ambientes com nenhuma observação
 df <- df |> filter(!env %in% c("E0171","E0172","E0225"))
@@ -304,16 +475,174 @@ for (i in envs_list){
   }
 ```
 
-## Variance component estimates
+# Summary of Plant Height Model Analysis 
 
-## Hypothesis test
+```{r}
+#| label: tbl-ph
+#| tbl-cap: Summary of the main genetic and statistical parameters for Plant Height (PL) across 33 trials of the soybean breeding program in Zambia.
 
-## Broad-sense heritability estimation
+tabela_geral_PH |> 
+  mutate(significance = case_when(
+    `pvalue` < 0.01 ~ "**",
+    `pvalue` < 0.05 ~ "*",
+    TRUE             ~ "ns" 
+  )) |> 
+  kable(
+    align = "c",
+    col.names = c(
+    "Trial", 
+    "LRT statistic", 
+    "p-value", 
+    "Significance", 
+    "Broad-sense heritability (H²)", 
+    "Coefficient of Variation (%)"
+  )) |> 
+  kable_styling(bootstrap_options = "striped", full_width = TRUE)
 
-## Coefficient of experimental variation
+```
 
-# Discussion
+Regarding Plant Height (PH), trials `E0108`, `E0170`, and `E0230` were the only ones that did not present genetic variance above zero, meaning the Likelihood Ratio Test failed to reject the null hypothesis ($H_{0}$). This same behavior was observed for broad-sense heritability ($H^2$); in environments with no significant genetic variance, heritability was consequently zero or extremely close to it. Overall, heritability values varied from zero to 0.87. Furthermore, the coefficient of variation (CV) was low in general, indicating that the experiments were conducted with high experimental precision.
 
-\
+# BLUPs and Reability
 
-\
+In this section we can observe the predicted value of each genotype in each trial individually. There are some environments that have more genotypes or different genotypes. Also, observing the standard errors it is possible to identify what trials are unbalanced.
+
+```{r}
+#| label: tbl-ph-blup
+#| tbl-cap: Predicted values (BLUPs) and standard errors for Plant Height (PH) of soybean breeding genotypes evaluated across 33 trials in Zambia.
+
+selected_trials <- names(singleTrial_blup_PH)
+tabela_grande <- singleTrial_blup_PH[selected_trials] |> 
+  map(~ .x |> select(gen, predicted.value, std.error)) |>
+  reduce(full_join, by = "gen")
+
+colunas_valores <- rep(c("Predicted value", "Stand. error"), length(selected_trials))
+
+tabela_grande |> 
+  kable(
+    align = "c",
+    col.names = c("Genotype", colunas_valores)
+  ) |> 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE) |> 
+  add_header_above(c(" " = 1, setNames(rep(2, length(selected_trials)), selected_trials))) |> 
+  scroll_box(width = "100%", height = "600px")
+
+```
+
+
+```{r}
+#| label: tbl-common-geno-ph
+#| tbl-cap: Top five ranked soybean breeding genotype in Zambia 
+low_cv_envs <- tabela_geral_PH |> 
+  select(env, h2, cv, significance) |> 
+  filter(significance == "TRUE" & cv < 30) |> 
+  arrange(cv)
+
+envs <- low_cv_envs$env
+
+genotipos_repetidos <- singleTrial_blup_PH[envs] |> 
+  map_dfr(~ .x |> arrange(desc(predicted.value)) |> head(5) |> select(gen)) |> 
+  count(gen) |> 
+  filter(n > 1) |> 
+  pull(gen) |> 
+  as.character()
+
+set.seed(42) 
+cores_paleta <- hcl.colors(length(genotipos_repetidos), palette = "Earth") |> 
+  paste0("80") 
+mapa_cores <- setNames(cores_paleta, genotipos_repetidos)
+
+tabela_longa <- envs |> 
+  set_names() |> 
+  map_dfr(~ {
+    singleTrial_blup_PH[[.x]] |>  
+      arrange(desc(predicted.value)) |>   
+      head(5) |> 
+      select(gen, predicted.value) |> 
+      mutate(
+        rank = c("1st", "2nd", "3rd", "4th", "5th"),
+        gen = as.character(gen)
+      )
+  }, .id = "env")
+
+tabela_larga <- tabela_longa |> 
+  pivot_wider(
+    id_cols = env, 
+    names_from = rank, 
+    values_from = c(gen, predicted.value),
+    names_glue = "{rank}_{.value}" 
+  ) |> 
+  select(
+    env,
+    `1st_gen`, `1st_predicted.value`,
+    `2nd_gen`, `2nd_predicted.value`,
+    `3rd_gen`, `3rd_predicted.value`,
+    `4th_gen`, `4th_predicted.value`,
+    `5th_gen`, `5th_predicted.value`
+  )
+
+sub_colunas <- c("Trial", rep(c("Genotype", "Predicted value"), 5))
+
+tabela_final <- kbl(tabela_larga, align = "c", col.names = sub_colunas) |> 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE) |> 
+  add_header_above(c(" " = 1, "1st" = 2, "2nd" = 2, "3rd" = 2, "4th" = 2, "5th" = 2))
+
+colunas_indices <- c(2, 4, 6, 8, 10)
+
+for (col in colunas_indices) {
+  valores_coluna <- as.character(tabela_larga[[col]])
+
+  marcar_negrito <- valores_coluna %in% genotipos_repetidos
+  
+  cores_fundo <- ifelse(marcar_negrito, mapa_cores[valores_coluna], "transparent")
+  cores_fundo[is.na(cores_fundo)] <- "transparent"
+  
+  tabela_final <- tabela_final |> 
+    column_spec(
+      column = col, 
+      bold = marcar_negrito,
+      background = cores_fundo
+    )
+}
+
+tabela_final
+```
+
+In the table above the genotypes in bold and colored are repeated at least once in this top five rank in each trial. It is interesting to observe that for Plant Height, the same genotypes were repeated more frequently compared to Grain Yield. Genotypes `G092` and `G233` seem to be promising, since they appear frequently across both traits. Probably, these materials can be considered stable, meaning they present a consistent behavior across different environments.
+
+```{r}
+#| label: tbl-freq-top-five-ph
+#| tbl-cap: Frequency of each soybean breeding genotype in the top five genotypes in each trial in Zambia.
+
+frequencia_geral <- tabela_larga |>
+  select(env, ends_with("_gen")) |> 
+  pivot_longer(cols = ends_with("_gen"), values_to = "genotipo") |> 
+  count(genotipo, name = "total_ambientes") |> 
+  arrange(desc(total_ambientes))
+
+kable(frequencia_geral,
+      col.names = c("Genotype", "Frequency")) |> 
+kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+```
+
+```{r}
+#| label: tbl-common-geno
+#| tbl-cap: Common genotypes
+
+G146 <- tabela_longa |> select (gen, env, rank, predicted.value) |> filter(gen == "G146" ) |> arrange(rank)
+kable(G146,
+      align = "c",
+      col.names = c("Genotype","Trial", "Rank position", "Predicted value")) |> 
+kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+
+G244 <- tabela_longa |> select (gen, env, rank, predicted.value) |> filter(gen == "G244" ) |> arrange(rank)
+kable(G244,
+      align = "c",
+      col.names = c("Genotype","Trial", "Rank position", "Predicted value")) |> 
+kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+```
+
+As observed for the previous trait, Plant Height (PH) values varied considerably among trials. For example, genotype `G244` reached a height of 60 cm and was top-ranked in trial`E0283`. Genotype `G146`had similar results. These results highlight the need to include genotype-by-environment (GxE) interactions in the model. This is evidenced by the fact that a single genotype can exhibit superior performance in specific environments while performing poorly in others, despite its high overall ranking.
+
+# Conclusion
+
