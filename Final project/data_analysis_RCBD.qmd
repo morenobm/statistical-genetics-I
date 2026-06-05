@@ -131,8 +131,6 @@ df$gen <- as.factor(df$gen)
 df$RAINFED <- as.factor(df$RAINFED)
 ```
 
-USAR O DF COMO BASE DE DADOS!!! ELE JÁ ESTÁ FILTRADO
-
 # Exercise
 
 Choose two traits. Perform data analysis of all trials in your dataset
@@ -146,15 +144,34 @@ task must be carried out within groups.
 
 # Introduction
 
-This report provides a data analysis of a multi-environment soybean breeding in Zambia dataset, focusing on two agronomic traits **Grain Yield** and **Plant Height**. Utilizing a Randomized Complete Block Design (RCBD) framework, all of the 33 individual trials were evaluated through mixed model methodology. Beyond estimation of  variance components, statistical hypothesis tests, and experimental quality were audited using broad-sense heritability ($H^{2}$) and the coefficient of variation (CV%). Furthermore, selected candidates were evaluated based on their Best Linear Unbiased Predictions (BLUPs) and respective reliability values. Finally,  a cross-trial ranking comparison is presented, providing a critical speculation on the underlying genetic and environmental factors that govern the differences or similarities in genotype performance across locations.
+This report provides a data analysis of a multi-environment soybean
+breeding in Zambia dataset, focusing on two agronomic traits **Grain
+Yield** and **Plant Height**. Utilizing a Randomized Complete Block
+Design (RCBD) framework, all of the 33 individual trials were evaluated
+through mixed model methodology. Beyond estimation of variance
+components, statistical hypothesis tests, and experimental quality were
+audited using broad-sense heritability ($H^{2}$) and the coefficient of
+variation (CV%). Furthermore, selected candidates were evaluated based
+on their Best Linear Unbiased Predictions (BLUPs) and respective
+reliability values. Finally, a cross-trial ranking comparison is
+presented, providing a critical speculation on the underlying genetic
+and environmental factors that govern the differences or similarities in
+genotype performance across locations.
 
 # Trait 1 - GY
 
-Our dataset comprised 33 trials conducted in Zambia. The experiments were arranged in a Randomized Complete Block Design (RCBD) with 3 blocks and approximately 30 genotypes per trial. Not all genotypes were present across all trials. Furthermore, because some experiments had missing plots over the course of the evaluation, we implemented the following mixed model:
-$$y_{ij}=b_{j}+g_{i}+e_{ij}$$
-Where:
-$b_{j}$ was considered a fixed effect because there are only 3 blocks within each experiment.
-$g_{i}$ was considered a random effect, where $g_i \sim N(0, \sigma^2_g)$, since the genotypes are samples from a larger breeding population. Additionally, modeling genotypes as random allowed us to recover information and account for the unbalanced nature of the data.
+Our dataset comprised 33 trials conducted in Zambia. The experiments
+were arranged in a Randomized Complete Block Design (RCBD) with 3 blocks
+and approximately 30 genotypes per trial. Not all genotypes were present
+across all trials. Furthermore, because some experiments had missing
+plots over the course of the evaluation, we implemented the following
+mixed model: $$y_{ij}=b_{j}+g_{i}+e_{ij}$$ Where: $b_{j}$ was considered
+a fixed effect because there are only 3 blocks within each experiment.
+$g_{i}$ was considered a random effect, where
+$g_i \sim N(0, \sigma^2_g)$, since the genotypes are samples from a
+larger breeding population. Additionally, modeling genotypes as random
+allowed us to recover information and account for the unbalanced nature
+of the data.
 
 ```{r}
 #| label: GY_analysis
@@ -170,6 +187,7 @@ info_env_GH <- df |>
     NAs = sum(is.na(GY)),
     .groups = "drop")
 
+library(asreml)
 
 # Rodando para cada trial isoladamente
 singleTrial_models_GY <- list()
@@ -205,8 +223,7 @@ for (i in envs_list){
                                maxit = 100,
                                na.action = na.method(y=c("omit")))
   
-  pval <- lrt.asreml(model, m_red_GY, boundary = T)
-  
+  pval <- lrt(model, m_red_GY, boundary = T)  
   
   h2 <- vpredict(model, H2 ~ V1/(V1+V2))
   cv <- sqrt(varcomp[2,1])/mean(df_env$GY, na.rm=T)
@@ -227,7 +244,7 @@ for (i in envs_list){
   }
 ```
 
-# Summary of Grain Yield Model Analysis 
+# Summary of Grain Yield Model Analysis
 
 ```{r}
 #| label: tbl-gy
@@ -258,11 +275,82 @@ tabela_geral_GY |>
 
 ```
 
-For Grain Yield (GY) it is visible that the trials `E0108`, `E0174`, `E0175`, `E0224`, `E0280`, and `E0285` did not present variance difference, that is, the test did not rejected $H_0$ which means the genetic variance is equal to zero.
+For Grain Yield (GY) it is visible that the trials `E0108`, `E0174`,
+`E0175`, `E0224`, `E0280`, and `E0285` did not present variance
+difference, that is, the test did not rejected $H_0$ which means the
+genetic variance is equal to zero.
 
 # BLUPs and Reability
 
-In this section we can observe the predicted value of each genotype in each trial individually. There are some environments that have more genotypes or different genotypes. Also, observing the standard errors it is possible to identify what trials are unbalanced.
+In this section we can observe the predicted value of each genotype in
+each trial individually. There are some environments that have more
+genotypes or different genotypes. Also, observing the standard errors it
+is possible to identify what trials are unbalanced.
+
+```{r}
+#| label: create-gy-plots
+#| echo: false
+graficos_GY <- list()
+
+#  loop para cada ambiente analisado
+for (ambiente in names(singleTrial_blup_GY)) {
+  
+  dados_blup <- singleTrial_blup_GY[[ambiente]]
+  
+  p <- ggplot(data = dados_blup, aes(x = reorder(gen, -predicted.value), y = predicted.value)) +
+    geom_col(color = "white", fill = "#10342d") + 
+    
+    geom_errorbar(aes(ymin = predicted.value - std.error, ymax = predicted.value + std.error), width = 0.2) +
+    theme_minimal() + 
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+          text = element_text(size = 14)) +  
+    labs(title = paste("BLUPs for Grain Yield (GY) - Trial:", ambiente),
+         x = "Genotype", 
+         y = "BLUP (Predicted Value)")
+  
+  graficos_GY[[ambiente]] <- p
+}
+```
+
+Here, the BLUPs for Grain Yield (GY) across the trials are presented.
+The bar charts (see the panel tabset below) illustrate the genotype
+ranking within each environment. The error bars represent the standard
+error of the prediction, providing a visual assessment of the
+reliability of the estimates in each specific trial.
+
+```{r}
+#| label: graficos-gy
+#| results: asis
+#| echo: false
+#| fig-width: 10
+#| fig-height: 6
+
+# Loop com abas
+for (ambiente in names(graficos_GY)) {
+  cat("### ", ambiente, "\n\n")
+  print(graficos_GY[[ambiente]])
+  cat("\n\n")
+}
+```
+
+The visual analysis of the BLUPs across the individual trials reveals a
+dynamic performance behavior among the genotypes. The fluctuation in the
+top-ranking positions highlights the presence of a strong Genotype by
+Environment (GxE) interaction. While the ranking order shifts depending
+on the trial, the consistent appearance of certain materials, such as
+genotypes G092 and G233, at the top of the distribution suggests that
+these lines possess a degree of wide adaptation and stability across
+different Zambian environments.
+
+The variation in the magnitude of the error bars across the charts
+reflects the distinct experimental precisions and unbalance degrees
+among the trials. However, by relying on mixed-model methodology, we
+successfully recovered information to estimate these genetic values
+reliably.
+
+For a comprehensive numerical reference, the predicted values and
+standard errors for all genotypes across all environments are detailed
+in @tbl-GY-blup-table.
 
 ```{r}
 #| label: tbl-GY-blup-table
@@ -286,7 +374,10 @@ tabela_grande |>
 
 ```
 
-As shown in @top-genotypes-gy, filtering for trials with a CV under 30% and positive genetic variance resulted in the selection of 20 out of 33 trials. This high retention rate reflects the overall experimental quality of the breeding program.
+As shown in @top-genotypes-gy, filtering for trials with a CV under 30%
+and positive genetic variance resulted in the selection of 20 out of 33
+trials. This high retention rate reflects the overall experimental
+quality of the breeding program.
 
 ```{r}
 #| label: tbl-top-genotypes-gy
@@ -369,25 +460,41 @@ tabela_final
 ```
 
 ```{r}
-#| label: tbl-freq-top-five
-#| tbl-cap: Frequency of each genotype in the top five genotypes in each trial
+#| label: fig-freq-top-five
+#| fig-cap: Frequency of each genotype in the top five genotypes in each trial
 
 # How many times a genotype appears in the table
 frequencia_geral <- tabela_larga |>
   select(env, ends_with("_gen")) |> 
   pivot_longer(cols = ends_with("_gen"), values_to = "genotipo") |> 
-  # Conta apenas quantas vezes o genótipo aparece no total
   count(genotipo, name = "total_ambientes") |> 
   arrange(desc(total_ambientes))
 
-kable(frequencia_geral,
-      col.names = c("Genotype", "Frequency")) |> 
-kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+ggplot(data = frequencia_geral, aes(x = total_ambientes, y = reorder(genotipo, total_ambientes))) +
+  geom_col(color = "white", fill = "#10342d") +  
+  theme_minimal() +
+  labs(
+    x = "Frequency (Number of Trials in Top 5)", 
+    y = "Genotype"
+  ) +
+  theme(
+    text = element_text(size = 08),
+    panel.grid.minor = element_blank() 
+  )
 ```
 
-The top two genotypes with the highest frequency of occurrence behave differently across the trials. Genotype `G092` exhibits a constant predicted value, whereas genotype `G223` shows variable performance. Despite both being top-ranked, their distinct predicted values across trials indicate genotype-by-environment (GxE) interactions that were not captured in this report.
+The top two genotypes with the highest frequency of occurrence behave
+differently across the trials. Genotype `G092` exhibits a constant
+predicted value, whereas genotype `G233` shows variable performance.
+Despite both being top-ranked, their distinct predicted values across
+trials indicate genotype-by-environment (GxE) interactions that were not
+captured in this report.
 
 ```{r}
+#| label: tbl-top-two-behavior
+#| tbl-cap: Behavior of the two most frequent genotypes across ranked environments
+
+
 G233 <- tabela_longa |> select (gen, env, rank, predicted.value) |> filter(gen == "G233" ) |> arrange(rank)
 kable(G233,
       align = "c",
@@ -401,7 +508,25 @@ kable(G092,
 kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
 ```
 
-# Trait 2 - Plant Height (PH)  
+A closer examination of the two most frequent genotypes highlights
+contrasting adaptive strategies. Genotype **G092** emerges as a highly
+stable material with wide adaptation; it consistently secures top-tier
+rankings (predominantly 1st and 2nd) and maintains reliable predicted
+values across diverse conditions. Conversely, genotype **G233** exhibits
+phenotypic plasticity. It is highly responsive to environments, eaching
+a peak predicted yield of over 4,800 kg/ha in trial E0229, but
+experiences significant yield penalties in more restrictive environments
+(dropping to approximately 1,935 kg/ha in E0283).
+
+From a practical breeding perspective, **G092** is highly recommended
+for broad geographical deployment to ensure yield stability. Meanwhile,
+**G233** represents a valuable asset for targeted selection,
+strategically suited for high-yielding Target Population of Environments
+(TPEs). Ultimately, these distinct behavioral patterns definitively
+validate the necessity of characterizing Genotype-by-Environment (GxE)
+interactions in multi-environment trial evaluations.
+
+# Trait 2 - Plant Height (PH)
 
 ```{r}
 #| label: PH_analysis
@@ -453,7 +578,7 @@ for (i in envs_list){
                                maxit = 100,
                                na.action = na.method(y=c("omit")))
   
-  pval <- lrt.asreml(model, m_red_PH, boundary = T)
+  pval <- lrt(model, m_red_PH, boundary = T)  
   
   
   h2 <- vpredict(model, H2 ~ V1/(V1+V2))
@@ -475,7 +600,7 @@ for (i in envs_list){
   }
 ```
 
-# Summary of Plant Height Model Analysis 
+# Summary of Plant Height Model Analysis
 
 ```{r}
 #| label: tbl-ph
@@ -501,11 +626,85 @@ tabela_geral_PH |>
 
 ```
 
-Regarding Plant Height (PH), trials `E0108`, `E0170`, and `E0230` were the only ones that did not present genetic variance above zero, meaning the Likelihood Ratio Test failed to reject the null hypothesis ($H_{0}$). This same behavior was observed for broad-sense heritability ($H^2$); in environments with no significant genetic variance, heritability was consequently zero or extremely close to it. Overall, heritability values varied from zero to 0.87. Furthermore, the coefficient of variation (CV) was low in general, indicating that the experiments were conducted with high experimental precision.
+Regarding Plant Height (PH), trials `E0108`, `E0170`, and `E0230` were
+the only ones that did not present genetic variance above zero, meaning
+the Likelihood Ratio Test failed to reject the null hypothesis
+($H_{0}$). This same behavior was observed for broad-sense heritability
+($H^2$); in environments with no significant genetic variance,
+heritability was consequently zero or extremely close to it. Overall,
+heritability values varied from zero to 0.87. Furthermore, the
+coefficient of variation (CV) was low in general, indicating that the
+experiments were conducted with high experimental precision.
 
 # BLUPs and Reability
 
-In this section we can observe the predicted value of each genotype in each trial individually. There are some environments that have more genotypes or different genotypes. Also, observing the standard errors it is possible to identify what trials are unbalanced.
+In this section we can observe the predicted value of each genotype in
+each trial individually. There are some environments that have more
+genotypes or different genotypes. Also, observing the standard errors it
+is possible to identify what trials are unbalanced.
+
+```{r}
+#| label: create-ph-plots
+#| echo: false
+
+# Criando a lista de gráficos para PH
+graficos_PH <- list()
+
+for (ambiente in names(singleTrial_blup_PH)) {
+  
+  dados_blup <- singleTrial_blup_PH[[ambiente]]
+  
+  p <- ggplot(data = dados_blup, aes(x = reorder(gen, -predicted.value), y = predicted.value)) +
+    geom_col(color = "white", fill = "#10342d") + 
+    geom_errorbar(aes(ymin = predicted.value - std.error, ymax = predicted.value + std.error), width = 0.2) +
+    theme_minimal() + 
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+          text = element_text(size = 14)) +  
+    labs(title = paste("BLUPs for Plant Height (PH) - Trial:", ambiente),
+         x = "Genotype", 
+         y = "BLUP (Predicted Value)")
+  
+  graficos_PH[[ambiente]] <- p
+}
+```
+
+Here, we present the BLUPs for Plant Height (PH) across the trials. The
+bar charts (see the panel tabset below) illustrate the genotype ranking
+within each environment. We used error bars to represent the standard
+error of the prediction, providing a visual assessment of the
+reliability of our estimates in each specific trial.
+
+```{r}
+#| label: graficos-ph
+#| results: asis
+#| fig-width: 10
+#| fig-height: 6
+
+
+# Loop com abas para exibir os gráficos de PH
+for (ambiente in names(graficos_PH)) {
+  cat("### ", ambiente, "\n\n")
+  print(graficos_PH[[ambiente]])
+  cat("\n\n")
+}
+
+cat(":::\n")
+```
+
+Our visual analysis of the BLUPs for Plant Height (PH) across the
+individual trials reveals substantial variation among environments, as
+we previously indicated by the broad-sense heritability (H²) values
+ranging from zero to 0.87. In trials with non-significant genetic
+variance (such as E0108, E0170, and E0230), we observe that the genotype
+distributions appear flat, reflecting the lack of genetic
+differentiation. Conversely, in highly heritable environments, we can
+see a clear genetic gradient. The generally low standard errors and
+tight error bars visually confirm the high experimental precision (low
+CV%) of our breeding trials.
+
+For a comprehensive numerical reference, we detailed the predicted
+values and standard errors for all genotypes across all environments in
+@tbl-ph-blup.
 
 ```{r}
 #| label: tbl-ph-blup
@@ -528,7 +727,6 @@ tabela_grande |>
   scroll_box(width = "100%", height = "600px")
 
 ```
-
 
 ```{r}
 #| label: tbl-common-geno-ph
@@ -608,41 +806,222 @@ for (col in colunas_indices) {
 tabela_final
 ```
 
-In the table above the genotypes in bold and colored are repeated at least once in this top five rank in each trial. It is interesting to observe that for Plant Height, the same genotypes were repeated more frequently compared to Grain Yield. Genotypes `G092` and `G233` seem to be promising, since they appear frequently across both traits. Probably, these materials can be considered stable, meaning they present a consistent behavior across different environments.
+In the table above the genotypes in bold and colored are repeated at
+least once in this top five rank in each trial. It is interesting to
+observe that for Plant Height, the same genotypes were repeated more
+frequently compared to Grain Yield. Genotypes `G092` and `G233` seem to
+be promising, since they appear frequently across both traits. Probably,
+these materials can be considered stable, meaning they present a
+consistent behavior across different environments.
 
 ```{r}
-#| label: tbl-freq-top-five-ph
-#| tbl-cap: Frequency of each soybean breeding genotype in the top five genotypes in each trial in Zambia.
+#| label: fig-freq-top-five-ph
+#| fig-cap: Frequency of each soybean breeding genotype in the top five genotypes in each trial for Plant Height in Zambia.
 
-frequencia_geral <- tabela_larga |>
+frequencia_geral_ph <- tabela_larga |>
   select(env, ends_with("_gen")) |> 
   pivot_longer(cols = ends_with("_gen"), values_to = "genotipo") |> 
   count(genotipo, name = "total_ambientes") |> 
   arrange(desc(total_ambientes))
 
-kable(frequencia_geral,
-      col.names = c("Genotype", "Frequency")) |> 
-kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+ggplot(data = frequencia_geral_ph, aes(x = total_ambientes, y = reorder(genotipo, total_ambientes))) +
+  geom_col(color = "white", fill = "#10342d") +  
+  theme_minimal() +
+  labs(
+    x = "Frequency (Number of Trials in Top 5)", 
+    y = "Genotype"
+  ) +
+  theme(
+    text = element_text(size = 8),
+    panel.grid.minor = element_blank() 
+  )
 ```
 
-```{r}
-#| label: tbl-common-geno
-#| tbl-cap: Common genotypes
+As observed for the previous trait, Plant Height (PH) values varied
+considerably among trials. This is further evidenced by tracking
+individual high-ranking lines across different environmental conditions
+in @tbl-common-geno-specific.
 
-G146 <- tabela_longa |> select (gen, env, rank, predicted.value) |> filter(gen == "G146" ) |> arrange(rank)
+```{r}
+#| label: tbl-common-geno-specific
+#| tbl-cap: Behavior of high-ranking genotypes across specific environmental trials.
+
+G146 <- tabela_longa |> select(gen, env, rank, predicted.value) |> filter(gen == "G146") |> arrange(rank)
 kable(G146,
       align = "c",
       col.names = c("Genotype","Trial", "Rank position", "Predicted value")) |> 
 kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
 
-G244 <- tabela_longa |> select (gen, env, rank, predicted.value) |> filter(gen == "G244" ) |> arrange(rank)
+G244 <- tabela_longa |> select(gen, env, rank, predicted.value) |> filter(gen == "G244") |> arrange(rank)
 kable(G244,
       align = "c",
       col.names = c("Genotype","Trial", "Rank position", "Predicted value")) |> 
 kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
 ```
 
-As observed for the previous trait, Plant Height (PH) values varied considerably among trials. For example, genotype `G244` reached a height of 60 cm and was top-ranked in trial`E0283`. Genotype `G146`had similar results. These results highlight the need to include genotype-by-environment (GxE) interactions in the model. This is evidenced by the fact that a single genotype can exhibit superior performance in specific environments while performing poorly in others, despite its high overall ranking.
+When we take a closeranalysis of the specific behavior of genotypes G146
+and G244, the environmental effect on plant height becomes clearer. We
+can observe that genotype G146 appears exceptionally frequently at the
+top of the ranking, occupying the 1st or 2nd position in different new
+trials. However, its predicted height is highly variable; it reaches
+approximately 109 cm in highly designed environments such as E0284 and
+E0255, but suffers a drastic reduction to only 28.4 cm in trial E0107.
+
+Similarly, we note that genotype G244 secures the 1st position in both
+E0278 and E0283, but its absolute height in these two environments shows
+a large contrast (101.5 cm versus 60.4 cm). This indicates that,
+although these genotypes are consistently among the tallest in their
+various trials, their absolute growth is greatly influenced by the
+specific conditions of each location.
+
+From a practical agronomic point of view, we emphasize that this level
+of phenotypic plasticity is a critical factor for selection. A plant
+height of 28.4 cm (as observed for G146) is generally too low for
+efficient mechanized harvesting, leading to potential yield losses in
+the field. On the other hand, heights exceeding 100 cm can increase the
+risk of lodging, depending on stem architecture. Therefore, we conclude
+that, although these lines exhibit strong genetic potential for growth,
+identifying and understanding the environmental stresses that cause
+these drastic height reductions is essential before making any safe
+varietal recommendations for Zambian environments.
+
+# Cross-Trait Ranking Comparison: GY vs PH
+
+To formally assess whether genotype rankings for Grain Yield (GY) and
+Plant Height (PH) are associated within each trial, we computed the
+Spearman rank correlation coefficient (ρ) between the BLUPs of both
+traits for each environment independently. This non-parametric approach
+is appropriate given that it does not assume a linear relationship
+between the traits, relying solely on the rank order of genotypes. A
+positive ρ indicates that taller genotypes tend to also yield more
+within that trial, whereas a negative ρ suggests a trade-off between the
+two traits.
+
+```{r}
+#| label: fig-spearman-gy-ph
+#| fig-cap: Spearman rank correlation between GY and PH BLUPs within each trial.
+
+# Trials presentes em ambos os traits
+trials_comuns <- intersect(names(singleTrial_blup_GY), names(singleTrial_blup_PH))
+
+# Correlação de Spearman em loop
+spearman_results <- map_dfr(trials_comuns, function(env) {
+  
+  blup_gy <- singleTrial_blup_GY[[env]] |>
+    select(gen, GY = predicted.value)
+  
+  blup_ph <- singleTrial_blup_PH[[env]] |>
+    select(gen, PH = predicted.value)
+  
+  merged <- inner_join(blup_gy, blup_ph, by = "gen")
+  
+  if (nrow(merged) < 5) return(NULL)
+  
+  test <- cor.test(merged$GY, merged$PH, method = "spearman", exact = FALSE)
+  
+  data.frame(
+    env      = env,
+    rho      = round(test$estimate, 3),
+    pvalue   = round(test$p.value, 4),
+    sig      = case_when(
+      test$p.value < 0.01 ~ "**",
+      test$p.value < 0.05 ~ "*",
+      TRUE                ~ "ns"
+    ),
+    n_gen    = nrow(merged)
+  )
+})
+
+# Heatmap
+ggplot(spearman_results, aes(x = 1, y = reorder(env, rho), fill = rho)) +
+  geom_tile(color = "white", linewidth = 0.5) +
+  geom_text(aes(label = paste0(rho, " ", sig)), size = 3.2) +
+  scale_fill_gradient2(
+    low      = "#d73027",
+    mid      = "white",
+    high     = "#1a9850",
+    midpoint = 0,
+    limits   = c(-1, 1),
+    name     = "Spearman ρ"
+  ) +
+  labs(
+    title = "Spearman Correlation (GY vs PH) per Trial",
+    x     = NULL,
+    y     = "Trial"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x  = element_blank(),
+    axis.ticks.x = element_blank(),
+    panel.grid   = element_blank(),
+    text         = element_text(size = 11)
+  )
+```
+
+The Spearman correlation coefficients varied considerably across trials,
+ranging from ρ = −0.81 (E0278) to ρ = 0.65 (E0229), which itself
+reflects the magnitude of the GxE interaction previously discussed.Among
+the 30 trials evaluated, 14 presented a statistically significant
+correlation (p \< 0.05), of which 12 were positive and two were negative
+(E0278, ρ = −0.81; E0284, ρ = −0.47). The remaining 18 trials showed
+non-significant correlations, suggesting that in most environments GY
+and PH rankings are largely independent.
+
+The predominantly positive correlations may reflect a shared dependence
+on biomass accumulation, in favorable environments, genotypes with
+greater vegetative growth tend to simultaneously achieve higher grain
+yields. Conversely, the strong negative correlations observed in E0278
+and E0284 suggest that in those specific conditions, taller genotypes
+may have allocated more photoassimilates to vegetative structures at the
+expense of grain filling, a classical source-sink competition pattern.
+Overall, these results reinforce that multi-trait evaluation across
+environments is essential, as the GY–PH relationship is highly
+context-dependent and cannot be assumed to be consistent across the
+Zambian target population of environments.
 
 # Conclusion
 
+This report evaluated 33 soybean trials in Zambia using a mixed
+randomized block design (CRD) model to estimate genetic merit (BLUPs)
+for Grain Yield (GY) and Plant Height (PH). Quality control retained
+environments with a coefficient of variation below 30% and significant
+genetic variance (LRT, p \< 0.05), ensuring that only experimentally
+reliable trials were used for selection decisions. Broad-sense
+heritability values ​​reached up to 0.87, reflecting a high genetic signal
+in the most favorable environments.
+
+Significant changes in genotype ranking across locations definitively
+established Genotype-Environment (GxE) interaction as a primary factor
+in phenotypic expression across the target population of Zambian
+environments. This was illustrated by the contrasting adaptive
+strategies of the best-performing lines: for GY, the G092 genotype
+demonstrated remarkable stability across trials, while G233 exhibited
+high phenotypic plasticity, ranging from a peak of 4,825.4 kg/ha under
+highly favorable conditions to 1,935.7 kg/ha in restrictive
+environments. A similar pattern was observed for PH, where the G146
+genotype ranged from an optimal value of 109.1 cm to a severely stunted
+value of 28.4 cm, with direct implications for mechanical harvesting
+efficiency and lodging risk.
+
+To formally quantify the relationship between trait ratings, we
+calculated Spearman correlations between the BLUPs of GY and PH in each
+trial. The coefficients ranged from ρ = −0.81 (E0278) to ρ = 0.65
+(E0229), with 14 of the 30 trials showing statistically significant
+associations (p \< 0.05). The predominantly positive correlations in
+favorable environments suggest a shared dependence on biomass
+accumulation, while the strong negative values ​​observed in E0278 and
+E0284 point to a source-sink competition between vegetative growth and
+grain filling under specific conditions. Overall, the GY–PH relationship
+proved to be highly context-dependent, reinforcing that selection for a
+single trait would be insufficient for this target population.
+
+Trait consensus analysis identified genotypes G092 and G233 as the most
+promising candidates for advancement in Zambia's breeding program. The
+G092 line consistently ranked among the best performers for both grain
+yield (GY) and plant height (PH) in multiple environments, suggesting
+broad adaptation and stability. The G233 line, despite its plasticity,
+achieved peak performance, making it a strong candidate for targeted
+deployment in high-yielding Target Populations (TPEs). Together, these
+results highlight the value of multi-environmental and multi-trait
+assessment under a mixed model framework as a basis for informed and
+reliable selection decisions in soybean breeding programs.
