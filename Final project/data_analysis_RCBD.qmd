@@ -17,6 +17,13 @@ format:
       light: journal
       dark: darkly
     embed-resources: true
+    include-in-header:
+      text: |
+        <style>
+        body {
+          text-align: justify;
+        }
+        </style>
 crossref: {}
 editor: 
   markdown: 
@@ -81,7 +88,8 @@ data = read.csv("https://raw.githubusercontent.com/mauricioaraujj/Pan_African_Tr
 ```
 
 ```{r}
-#| label: outliers_PH
+#| label: fig-outliers-PH
+#| fig-cap: Exploratory data analysis of Plant Height (PH) showcasing distribution behavior and outlier detection. The vertical dotted orange lines and the boxplot's red markers identify the extreme values candidate for filtering or transformation prior to subsequent statistical modeling.
 
 # Normal Distribution Sd's
 ggplot(data, aes(x = PH_R8)) +
@@ -113,7 +121,8 @@ p_hist / p_box + plot_layout(heights = c(3, 1))
 ```
 
 ```{r}
-#| label: outliers_GY
+#| label: fig-outliers-GY
+#| fig-cap: Exploratory data analysis of Grain Yield (GY) showcasing distribution behavior and outlier detection. The vertical dotted orange lines and the boxplot's red markers identify the extreme values candidate for filtering or transformation prior to subsequent statistical modeling.
 
 # Normal Distribution Sd's
 ggplot(data, aes(x = GY)) +
@@ -194,7 +203,8 @@ $e_{ij} \sim N(0, \sigma^2_e)$.
 
 As most trials are completely balanced, the broad-sense heritability was
 estimated using the simple variance components ratio:
-$H² = \sigma²_g / ( \sigma²_g + \sigma²_e)$
+
+$$H² = \frac{\sigma²_g}{( \sigma²_g + \sigma²_e)}$$
 
 # Trait 1 - GY
 
@@ -314,7 +324,8 @@ genotypes or different genotypes. Also, observing the standard errors it
 is possible to identify what trials are unbalanced.
 
 ```{r}
-#| label: create-gy-plots
+#| label: fig-create-gy-plots
+#| fig-cap: Predicted values for Grain Yield (GY) and respective genotype rankings across individual trials. Each bar chart displays the performance rank within a specific trial.
 #| echo: false
 
 graficos_GY <- list()
@@ -345,11 +356,13 @@ error of the prediction, providing a visual assessment of the
 reliability of the estimates in each specific trial.
 
 ```{r}
-#| label: graficos-gy
+#| label: fig-graficos-gy
 #| results: asis
 #| echo: false
 #| fig-width: 10
 #| fig-height: 6
+#| fig-cap: Predicted values for Grain Yield (GY) and respective genotype rankings across individual trials. Each bar chart displays the performance rank within a specific trial.
+
 
 # Imprimindo gráficos
 grupos <- split(graficos_GY,ceiling(seq_along(graficos_GY) / 4))
@@ -359,8 +372,12 @@ for(i in seq_along(grupos)){
 }
 ```
 
+
+
 ```{r}
 #| label: fig-blup_by_envs_plots_GY
+#| fig-cap: Genotypic performance and temporal stability. The line graph illustrates the BLUP-predicted values (Y-axis) for the grain yield (GY) trait across the 2019 to 2023 period. The horizontal axis discriminates the different testing environments exibiting the genotype-by-environment (G×E) interaction of the soybean breeding genotypes along the years.
+
 blup_all_GY <- bind_rows(
   lapply(names(singleTrial_blup_GY), function(env){
     df <- singleTrial_blup_GY[[env]]
@@ -443,10 +460,7 @@ tabela_grande |>
 
 ```
 
-As shown in @top-genotypes-gy, filtering for trials with a CV under 30%
-and positive genetic variance resulted in the selection of 20 out of 33
-trials. This high retention rate reflects the overall experimental
-quality of the breeding program.
+As shown in @tbl-top-genotypes-gy, filtering for trials with a CV under 30% and positive genetic variance resulted in the selection of 20 out of 33 trials. This high retention rate reflects the solid experimental quality of the breeding program. Furthermore, the highlighted genotypes indicate those that recur across different trials or maintain top positions within the ranking, showcasing their high yield potential and stability across environments in Zambia.
 
 ```{r}
 #| label: tbl-top-genotypes-gy
@@ -764,6 +778,8 @@ for(i in seq_along(grupos)){
 
 ```{r}
 #| label: fig-blup_by_envs_plots_PH
+#| fig-cap: Ppredicted values for Plant Height (PH) and respective genotype rankings across individual trials. Each bar chart displays the performance rank within a specific trial.
+
 blup_all_PH <- bind_rows(
   lapply(names(singleTrial_blup_PH), function(env){
     df <- singleTrial_blup_PH[[env]]
@@ -840,7 +856,7 @@ tabela_grande |>
 
 ```{r}
 #| label: tbl-common-geno-ph
-#| tbl-cap: Top five ranked soybean breeding genotype in Zambia for Plant Height (PH)
+#| tbl-cap: Predicted value of Plant Height (PH) of the top five soybean breeding genotypes ranked (1 to 5) in each trial in Zambia 
 
 low_cv_envs <- tabela_geral_PH |> 
   select(env, h2, cv, significance) |> 
@@ -857,7 +873,7 @@ genotipos_repetidos <- singleTrial_blup_PH[envs] |>
   as.character()
 
 set.seed(42) 
-cores_paleta <- hcl.colors(length(genotipos_repetidos), palette = "Earth") |> 
+cores_paleta <- hcl.colors(length(genotipos_repetidos), palette = "Greens 2") |> 
   paste0("80") 
 mapa_cores <- setNames(cores_paleta, genotipos_repetidos)
 
