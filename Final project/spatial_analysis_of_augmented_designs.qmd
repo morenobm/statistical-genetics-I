@@ -1,0 +1,122 @@
+---
+title: "Spatial analysis of augmented designs in sweet potato"
+author: 
+  - name: Bruna Moreno, Daniele Bononi, João Vitor Calvo, Renan Fantine
+    affiliation:
+      - name: Department of Genetics, ESALQ-USP
+        city: Piracicaba, São Paulo, Brazil
+format: 
+  html:
+    toc: true
+    toc-location: left
+    code-overflow: wrap
+    code-fold: true
+    fig-align: center
+    fig-width: 10
+    theme: 
+      light: journal
+      dark: darkly
+    embed-resources: true
+    include-in-header:
+      text: |
+        <style>
+        body {
+          text-align: justify;
+        }
+        </style>
+crossref: {}
+editor: 
+  markdown: 
+    wrap: 72
+---
+
+# Exercise
+
+The dataset available here has six trials laid out in an augmented row-column design (more details about this design here). Analyse each trial individually with increasing order of spatial adjustment. Report the improvement of the modelling (if any) when spatial trends are dealt with. Your report should have differences in the variance components, broad-sense heritabilities, and rankings. For each trial, determine the best model using semivariograms and the AIC. Don't forget that models with different fixed effects must be compared using the adjusted version of the AIC available on the lmmtools package.
+
+# Introduction (REFAZER!! PEGUEI DO RELATÓRIO ANTERIOR)
+
+This report provides a data analysis of a multi-environment soybean
+breeding in Zambia dataset, focusing on two agronomic traits **Grain
+Yield** and **Plant Height**. Utilizing a Randomized Complete Block
+Design (RCBD) framework, all of the 33 individual trials were evaluated
+through mixed model methodology. Beyond estimation of variance
+components, statistical hypothesis tests, and experimental quality were
+audited using broad-sense heritability ($H^{2}$) and the coefficient of
+variation ($CV%$). Furthermore, selected candidates were evaluated based
+on their Best Linear Unbiased Predictions (BLUPs) and respective
+reliability values. Finally, a cross-trial ranking comparison is
+presented, providing a critical speculation on the underlying genetic
+and environmental factors that govern the differences or similarities in
+genotype performance across locations.
+
+# Outliers Removal
+
+First, we performed some analysis to remove outlier data that are not
+agronomically consistent, and we standardized the codification of
+missing information to NA.
+
+```{r}
+#| label: setup
+#| include: false
+
+knitr::opts_chunk$set(
+  fig.show = "hold",
+  warning = FALSE,
+  message = FALSE,
+  results = "hold")
+```
+
+```{r}
+#| label: trials-data
+
+# Loading packages
+packages <- c("ggplot2", "patchwork", "tidyr", "dplyr", "purrr", "knitr", "kableExtra", "grid","ggcorrplot", "asreml")
+invisible(lapply(packages, function(p){
+  suppressMessages(suppressPackageStartupMessages(
+  suppressWarnings(library(p, character.only = TRUE))))}))
+
+# Loading phenotypic data 
+data = read.csv("https://raw.githubusercontent.com/ufv-molecular-breeding-lab/schaves_sweetpotato_two_stage/refs/heads/main/Data/Phenotype.csv", sep = ',')
+```
+
+
+```{r}
+# Trial identification
+unique(data$env)
+```
+# Trial 1 - OT1NAM22
+
+variance components, broad-sense heritabilities, and rankings
+
+## Best model
+
+# Trial 2 - OT1RWE21
+
+variance components, broad-sense heritabilities, and rankings
+
+## Best model
+
+# Trial 3 - OT1RWE22
+
+variance components, broad-sense heritabilities, and rankings
+
+## Best model
+
+# Trial 4 - OT1SER22
+
+variance components, broad-sense heritabilities, and rankings
+
+## Best model
+
+# Trial 5 - OT2NAM21
+
+variance components, broad-sense heritabilities, and rankings
+
+## Best model
+
+# Trial 6 - OT2SER21
+
+variance components, broad-sense heritabilities, and rankings
+
+## Best model
