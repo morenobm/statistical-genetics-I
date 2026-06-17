@@ -12,7 +12,6 @@ format:
     code-overflow: wrap
     code-fold: true
     fig-align: center
-    fig-width: 10
     theme: 
       light: journal
       dark: darkly
@@ -71,13 +70,20 @@ knitr::opts_chunk$set(
 #| label: trials-data
 
 # Loading packages
-packages <- c("ggplot2", "patchwork", "tidyr", "dplyr", "purrr", "knitr", "kableExtra", "grid","ggcorrplot", "asreml")
+packages <- c("ggplot2", "patchwork", "tidyr", "dplyr", "purrr", "knitr", "kableExtra", "grid","ggcorrplot", "asreml", "lmmtools")
 invisible(lapply(packages, function(p){
   suppressMessages(suppressPackageStartupMessages(
   suppressWarnings(library(p, character.only = TRUE))))}))
 
 # Loading phenotypic data 
 data = read.csv("https://raw.githubusercontent.com/ufv-molecular-breeding-lab/schaves_sweetpotato_two_stage/refs/heads/main/Data/Phenotype.csv", sep = ',')
+
+data$row_number <- as.factor(data$row_number)
+data$col_number <- as.factor(data$col_number)
+data$rowgroup <- as.factor(data$rowgroup)
+data$colgroup <- as.factor(data$colgroup)
+data$check <- as.factor(data$check)
+data$geno <- as.factor(data$geno)
 ```
 
 
@@ -85,10 +91,172 @@ data = read.csv("https://raw.githubusercontent.com/ufv-molecular-breeding-lab/sc
 # Trial identification
 unique(data$env)
 ```
+
 # Trial 1 - OT1NAM22
 
 variance components, broad-sense heritabilities, and rankings
 
+It is 50 rows and each row has 30 columns.
+
+```{r}
+t1 <- data |> filter (env == "OT1NAM22")
+
+unique(data$row_number)
+unique(data$col_number)
+unique(data$rowgroup)
+unique(data$colgroup)
+unique(data$check.cod)
+length(unique(data$geno.cod))
+unique(data$rc.group)
+
+# Conta os genótipos únicos por grupo de linha-coluna
+tapply(data$geno, data$rc.group, function(x) length(unique(x)))
+
+```
+The experiment has 3 super columns and 5 super rows, which means the blocks are . They are testing 1178 genotypes and 8 checks.
+
+The model used in the article Piepho & Williams (2016) can be represented
+
+$$ y = \mu + rowgroup + colgroup + rowgroup.colgroup + rowgroup.row + colgroup.col + genotype + \epsilon$$
+posso fazer tudo aleatorio e só as checks como fixo
+
+```{r}
+#| label: models
+
+# Piepho & Williams (2016) model as a starter
+
+model_1 <- asreml(fixed = rytha ~ at(check, "Check"),
+             random = ~ rowgroup + colgroup + rowgroup:colgroup + rowgroup:row_number + colgroup:col_number + at(check, "Candidate"):geno,
+             residual = ~idv(units),
+             na.action = na.method("include"),
+             data = t1)
+plot(varioGram(model_1, type = "default", spatial = "trend",
+formula = ~NULL, composite = TRUE, model = c("empirical"),
+metric = c("euclidean"), angle = 0, angle.tol = 180,
+nlag = 20, maxdist = 0.5, xlag = NA, lag.tol = 0.5, grid = TRUE))
+
+# Correcting col and row number
+
+model_2 <-  asreml(fixed = rytha ~ at(check, "Check"),
+             random = ~ rowgroup + colgroup + rowgroup:colgroup + rowgroup:row_number + colgroup:col_number + at(check, "Candidate"):geno,
+             residual = ~ ar1v(row_number):ar1(col_number),
+             na.action = na.method("include"),
+             data = t1)
+
+plot(varioGram(model_2, type = "default", spatial = "trend",
+formula = ~NULL, composite = TRUE, model = c("empirical"),
+metric = c("euclidean"), angle = 0, angle.tol = 180,
+nlag = 20, maxdist = 0.5, xlag = NA, lag.tol = 0.5, grid = TRUE))
+# 
+
+model_3 <-  asreml(fixed = rytha ~ rowgroup + colgroup + at(check, "Check"),
+             random = ~ rowgroup:colgroup + rowgroup:row_number + colgroup:col_number + at(check, "Candidate"):geno + units,
+             residual = ~ ar1v(row_number):ar1(col_number),
+             na.action = na.method("include"),
+             data = t1)
+
+plot(varioGram(model_3, type = "default", spatial = "trend",
+formula = ~NULL, composite = TRUE, model = c("empirical"),
+metric = c("euclidean"), angle = 0, angle.tol = 180,
+nlag = 20, maxdist = 0.5, xlag = NA, lag.tol = 0.5, grid = TRUE))
+
+```
+```{r}
+var_comp_model_1 <- summary(model_1)$varcomp
+
+blups_model_1 <- predict.asreml(model_1, classify = "at(check, 'Candidate'):geno", sed = TRUE)
+blups_model_1_pvals <- blups_model_1$pvals
+blups_model_1_sed <- blups_model_1$sed
+
+#blups
+blups_model_1_pvals |> 
+  arrange(desc(predicted.value))
+
+#blues
+blues_checks <- predict(model_1, classify = "check:geno")$pvals
+
+#Reliability
+reb_model_1 <- unique(1 - (blups_model_1$pvals$std.error^2/var_comp_model_1[6,1]))
+
+
+ggplot(data = t1, aes(x = col_number, y = row_number, fill = rytha)) + 
+  geom_tile() + 
+  theme_minimal() + 
+  theme(text = element_text(size = 20)) + 
+  labs(x = "Column", y = "Row") +
+  scale_fill_viridis_c(option = "magma")
+
+```
+
+```{r}
+# Best model
+
+```
+```{r}
+# Heritability
+
+calcular_heritabilidade_cullis <- function(modelo) {
+  # 1. Extrair a variância genética dos candidatos
+  vc <- summary(modelo)$varcomp
+  # Encontra a linha correspondente ao componente genético do candidato
+  sigma2_g <- vc["at(check, Candidate):geno!geno.var", "component"] 
+  
+  # 2. Obter a matriz de predições e os erros padrões associados (PEV)
+  pred <- predict(modelo, classify = "at(check, 'Candidate'):geno", sed = TRUE)
+  
+  # 3. Calcular a média quadrada das diferenças de erro padrão (Mean PEV)
+  mean_sed <- mean(pred$sed^2)
+  
+  # 4. Fórmula de Cullis
+  h2_cullis <- 1 - (mean_sed / (2 * sigma2_g))
+  return(h2_cullis)
+}
+
+# Calcule para os três modelos e reporte no relatório:
+calcular_heritabilidade_cullis(M1)
+calcular_heritabilidade_cullis(M2)
+calcular_heritabilidade_cullis(M3)
+```
+
+```{r}
+# Variance components
+
+# 1. Comparar as tabelas de componentes de variância de forma direta
+summary(M1)$varcomp
+summary(M2)$varcomp
+summary(M3)$varcomp
+
+# 2. Extrair e ranquear os BLUPs de cada modelo para ver a mudança de posições
+get_ranking <- function(modelo) {
+  predict(modelo, classify = "at(check, 'Candidate'):geno")$pvals %>%
+    filter(check == "Candidate") %>%
+    mutate(predicted.value = as.numeric(as.character(predicted.value))) %>%
+    filter(!is.na(predicted.value)) %>%
+    arrange(desc(predicted.value)) %>%
+    mutate(Posicao = row_number()) %>%
+    select(Posicao, geno, predicted.value)
+}
+
+rank1 <- get_ranking(M1)
+rank2 <- get_ranking(M2)
+rank3 <- get_ranking(M3)
+
+# Dica: Use uma correlação de Spearman para reportar o impacto no ranking
+cor(rank1$predicted.value, rank3$predicted.value, method = "spearman")
+```
+
+
+
+Testing whether the checks separated  
+
+```{r}
+wald.asreml(model_1)
+```
+The checks are significantly different, at least two of them.
+
+### Ranking
+
+como eu vou saber se tenho rows iguais, como descrito no artigo?
 ## Best model
 
 # Trial 2 - OT1RWE21
