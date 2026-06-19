@@ -622,14 +622,254 @@ variance components, broad-sense heritabilities, and rankings
 
 ## Best model
 
+Encaixar com o da Bruna no começo
+```{r}
+
+library(asreml)
+library(lmmtools)
+library(tidyverse)
+library(knitr)     
+
+data = read.csv("https://raw.githubusercontent.com/ufv-molecular-breeding-lab/schaves_sweetpotato_two_stage/refs/heads/main/Data/Phenotype.csv", sep = ',')
+
+data <- data |>
+  mutate(
+    env = as.factor(env),
+    row_number = as.factor(row_number),
+    col_number = as.factor(col_number),
+    rowgroup = as.factor(rowgroup),
+    colgroup = as.factor(colgroup),
+    check = as.factor(check),
+    geno = as.factor(geno)
+  )
+```
+
+
+
+
+
+
+
+
+
 # Trial 5 - OT2NAM21
 
-variance components, broad-sense heritabilities, and rankings
+```{r}
+# ====================================================================
+# Trial 5 - OT2NAM21
+# ====================================================================
+#| label: trial5-analysis
+#| message: false
+#| warning: false
 
+t5 <- data |> filter(env == "OT2NAM21") |> arrange(row_number, col_number)
+
+# -----------------------------------------------------------------
+# 1. Model Fit
+# -----------------------------------------------------------------
+M1_t5 <- asreml(
+  fixed = rytha ~ at(check, "Check"),
+  random = ~ rowgroup + colgroup + rowgroup:colgroup + row_number + col_number + at(check, "Candidate"):geno,
+  residual = ~ idv(units),
+  na.action = na.method("include"),
+  data = t5, workspace = 128e6
+)
+
+M2_t5 <- asreml(
+  fixed = rytha ~ at(check, "Check"),
+  random = ~ rowgroup + colgroup + rowgroup:colgroup + row_number + col_number + at(check, "Candidate"):geno,
+  residual = ~ ar1(row_number):ar1(col_number),
+  na.action = na.method("include"),
+  data = t5, workspace = 128e6
+)
+
+M3_t5 <- asreml(
+  fixed = rytha ~ at(check, "Check"),
+  random = ~ rowgroup + colgroup + rowgroup:colgroup + row_number + col_number + at(check, "Candidate"):geno + units,
+  residual = ~ ar1(row_number):ar1(col_number),
+  na.action = na.method("include"),
+  data = t5, workspace = 128e6
+)
+
+
+# -----------------------------------------------------------------
+# 2. Model Selection (Adjusted AIC / icREML)
+# -----------------------------------------------------------------
+cat("### Model Comparison (icREML) - OT2NAM21\n")
+
+lista_modelos_t5 <- list(
+  Baseline = M1_t5, 
+  Spatial_AR1 = M2_t5, 
+  Spatial_Nugget = M3_t5
+)
+
+aic_table_t5 <- lmmtools::icREML(lista_modelos_t5)
+
+aic_table_t5 <- aic_table_t5 |> 
+  arrange(AIC)
+
+print(aic_table_t5)
+
+best_model_name_t5 <- aic_table_t5$model[1]
+cat("\nThe best model for OT2NAM21 is:", best_model_name_t5, "\n\n")
+
+best_model_t5 <- if(best_model_name_t5 == "Baseline") M1_t5 else if(best_model_name_t5 == "Spatial_AR1") M2_t5 else M3_t5
+
+# -----------------------------------------------------------------
+# 3. Semivariograms Comparison
+# -----------------------------------------------------------------
+cat("### Semivariograms Comparison\n")
+plot(varioGram(M1_t5, type = "default", spatial = "trend", formula = ~NULL, composite = TRUE, model = c("empirical"), metric = c("euclidean"), angle = 0, angle.tol = 180, nlag = 20, maxdist = 0.5, xlag = NA, lag.tol = 0.5, grid = TRUE), main = "Baseline (M1)")
+plot(varioGram(M2_t5, type = "default", spatial = "trend", formula = ~NULL, composite = TRUE, model = c("empirical"), metric = c("euclidean"), angle = 0, angle.tol = 180, nlag = 20, maxdist = 0.5, xlag = NA, lag.tol = 0.5, grid = TRUE), main = "Spatial AR1 (M2)")
+plot(varioGram(M3_t5, type = "default", spatial = "trend", formula = ~NULL, composite = TRUE, model = c("empirical"), metric = c("euclidean"), angle = 0, angle.tol = 180, nlag = 20, maxdist = 0.5, xlag = NA, lag.tol = 0.5, grid = TRUE), main = "Spatial Nugget (M3)")
+
+# -----------------------------------------------------------------
+# 4. Variance Components & Heritability 
+# -----------------------------------------------------------------
+cat("### Variance Components\n")
+print(summary(best_model_t5)$varcomp)
+
+calc_cullis_corrigido_t5 <- function(model) {
+  vc_temp <- summary(model)$varcomp
+  gen_var_name <- grep("Candidate.*geno", rownames(vc_temp), value = TRUE)[1]
+  gen_var <- vc_temp[gen_var_name, "component"]
+  
+  pred <- predict(model, classify = "at(check, 'Candidate'):geno", sed = TRUE)
+  
+  sed_mat <- pred$sed
+  vdBLUP_avg <- mean(sed_mat[upper.tri(sed_mat, diag = FALSE)]^2, na.rm = TRUE)
+  
+  H2 <- 1 - (vdBLUP_avg / (2 * gen_var))
+  return(H2)
+}
+
+cat("\nBroad-sense Heritability (Cullis):", round(calc_cullis_corrigido_t5(best_model_t5), 3), "\n")
+
+# -----------------------------------------------------------------
+# 5. Rankings
+# -----------------------------------------------------------------
+blups_t5 <- predict(best_model_t5, classify = "at(check, 'Candidate'):geno")$pvals
+
+ranking_t5 <- blups_t5 |>
+  filter(check == "Candidate") |>
+  mutate(predicted.value = as.numeric(predicted.value)) |>
+  arrange(desc(predicted.value)) |>
+  select(geno, predicted.value, std.error) |>
+  head(15)
+
+cat("\n### Top 15 Candidates\n")
+print(ranking_t5)
+```
 ## Best model
+For Trial 5 (OT2NAM21), model selection based on the adjusted AIC (icREML) identified the Spatial_Nugget model (M3) as the most adequate fit (icREML = 5474.04). The inclusion of a two-dimensional autoregressive structure along with an independent nugget effect successfully accounted for the spatial heterogeneity in the field, which was visually confirmed by the flattening of the semivariance curve. Applying the rigorous Cullis et al. (2006) method—based on the mean squared standard error of a difference (SED) between all pairs of genotypes—the broad-sense heritability was estimated at 0.516. This moderate heritability indicates a reliable degree of genetic control over the phenotypic expression in this environment, ensuring accuracy in the selection of top-ranking candidates, most notably UGP202000272-5.
+
 
 # Trial 6 - OT2SER21
 
-variance components, broad-sense heritabilities, and rankings
+# ====================================================================
+# Trial 6 - OT2SER21
+# ====================================================================
+#| label: trial6-analysis
+#| message: false
+#| warning: false
 
+t6 <- data |> filter(env == "OT2SER21") |> arrange(row_number, col_number)
+
+# -----------------------------------------------------------------
+# 1. Model Fit
+# -----------------------------------------------------------------
+M1_t6 <- asreml(
+  fixed = rytha ~ at(check, "Check"),
+  random = ~ rowgroup + colgroup + rowgroup:colgroup + row_number + col_number + at(check, "Candidate"):geno,
+  residual = ~ idv(units),
+  na.action = na.method("include"),
+  data = t6, workspace = 128e6
+)
+
+M2_t6 <- asreml(
+  fixed = rytha ~ at(check, "Check"),
+  random = ~ rowgroup + colgroup + rowgroup:colgroup + row_number + col_number + at(check, "Candidate"):geno,
+  residual = ~ ar1(row_number):ar1(col_number),
+  na.action = na.method("include"),
+  data = t6, workspace = 128e6
+)
+
+M3_t6 <- asreml(
+  fixed = rytha ~ at(check, "Check"),
+  random = ~ rowgroup + colgroup + rowgroup:colgroup + row_number + col_number + at(check, "Candidate"):geno + units,
+  residual = ~ ar1(row_number):ar1(col_number),
+  na.action = na.method("include"),
+  data = t6, workspace = 128e6
+)
+
+# -----------------------------------------------------------------
+# 2. Model Selection
+# -----------------------------------------------------------------
+cat("### Model Comparison (icREML) - OT2SER21\n")
+
+lista_modelos_t6 <- list(
+  Baseline = M1_t6, 
+  Spatial_AR1 = M2_t6, 
+  Spatial_Nugget = M3_t6
+)
+
+aic_table_t6 <- lmmtools::icREML(lista_modelos_t6)
+
+aic_table_t6 <- aic_table_t6 |> 
+  arrange(AIC)
+
+print(aic_table_t6)
+
+best_model_name_t6 <- aic_table_t6$model[1]
+cat("\nThe best model for OT2SER21 is:", best_model_name_t6, "\n\n")
+
+best_model_t6 <- if(best_model_name_t6 == "Baseline") M1_t6 else if(best_model_name_t6 == "Spatial_AR1") M2_t6 else M3_t6
+
+# -----------------------------------------------------------------
+# 3. Semivariograms Comparison
+# -----------------------------------------------------------------
+cat("### Semivariograms Comparison\n")
+plot(varioGram(M1_t6, type = "default", spatial = "trend", formula = ~NULL, composite = TRUE, model = c("empirical"), metric = c("euclidean"), angle = 0, angle.tol = 180, nlag = 20, maxdist = 0.5, xlag = NA, lag.tol = 0.5, grid = TRUE), main = "Baseline (M1)")
+plot(varioGram(M2_t6, type = "default", spatial = "trend", formula = ~NULL, composite = TRUE, model = c("empirical"), metric = c("euclidean"), angle = 0, angle.tol = 180, nlag = 20, maxdist = 0.5, xlag = NA, lag.tol = 0.5, grid = TRUE), main = "Spatial AR1 (M2)")
+plot(varioGram(M3_t6, type = "default", spatial = "trend", formula = ~NULL, composite = TRUE, model = c("empirical"), metric = c("euclidean"), angle = 0, angle.tol = 180, nlag = 20, maxdist = 0.5, xlag = NA, lag.tol = 0.5, grid = TRUE), main = "Spatial Nugget (M3)")
+
+# -----------------------------------------------------------------
+# 4. Variance Components & Heritability
+# -----------------------------------------------------------------
+cat("### Variance Components\n")
+print(summary(best_model_t6)$varcomp)
+
+calc_cullis_corrigido_t6 <- function(model) {
+  vc_temp <- summary(model)$varcomp
+  gen_var_name <- grep("Candidate.*geno", rownames(vc_temp), value = TRUE)[1]
+  gen_var <- vc_temp[gen_var_name, "component"]
+  
+  pred <- predict(model, classify = "at(check, 'Candidate'):geno", sed = TRUE)
+  
+  sed_mat <- pred$sed
+  vdBLUP_avg <- mean(sed_mat[upper.tri(sed_mat, diag = FALSE)]^2, na.rm = TRUE)
+  
+  H2 <- 1 - (vdBLUP_avg / (2 * gen_var))
+  return(H2)
+}
+
+cat("\nBroad-sense Heritability (Cullis):", round(calc_cullis_corrigido_t6(best_model_t6), 3), "\n")
+
+# -----------------------------------------------------------------
+# 5. Rankings
+# -----------------------------------------------------------------
+blups_t6 <- predict(best_model_t6, classify = "at(check, 'Candidate'):geno")$pvals
+
+ranking_t6 <- blups_t6 |>
+  filter(check == "Candidate") |>
+  mutate(predicted.value = as.numeric(predicted.value)) |>
+  arrange(desc(predicted.value)) |>
+  select(geno, predicted.value, std.error) |>
+  head(15)
+
+cat("\n### Top 15 Candidates\n")
+print(ranking_t6)
+```
 ## Best model
+For Trial 6 (OT2SER21), model selection via icREML revealed an identical fit between the Spatial_AR1 and Spatial_Nugget models (icREML = 3624.78). Inspection of the variance components explained this convergence: the independent error term (`units`) in the Spatial_Nugget model hit the parameter boundary (Bound 'B'), effectively shrinking its variance to zero. This indicates that the two-dimensional autoregressive structure (AR1xAR1) alone was sufficient to capture all the residual spatial trends in this specific field, making the addition of a nugget effect redundant. Using the SED-based formulation by Cullis et al. (2006), the broad-sense heritability was estimated at 0.146. This relatively low heritability suggests that phenotypic expression in this trial was heavily masked by environmental micro-variations, warranting a more cautious approach when selecting candidates based on these specific BLUPs.
+
