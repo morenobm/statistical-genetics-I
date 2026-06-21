@@ -652,7 +652,469 @@ data <- data |>
     cn = as.numeric(col_number)
   )
 ```
+# Rwanda season 2021 (Trial 2 - OT1RWE21)
 
+## Modelling
+
+```{r}
+#| label: data-t2
+
+t2 <- data |> filter (env == "OT1RWE21")
+
+# Modifying the geno.cod and check.cod columns
+t2 <- t2 |> 
+  mutate(
+    check.cod = ifelse(is.na(check.cod), "Candidato", as.character(check.cod)),
+    geno.cod  = ifelse(is.na(geno.cod), "Testemunha", as.character(geno.cod))
+  ) |> 
+  mutate(
+    check.cod = as.factor(check.cod),
+    geno.cod  = as.factor(geno.cod),
+    rowgroup  = as.factor(rowgroup),
+    colgroup  = as.factor(colgroup),
+    rn        = as.factor(rn),
+    cn        = as.factor(cn)
+  )
+```
+
+In order to test the spatial correction, in this season and country was analyzed six models. The most basic model is the same described in [Piepho & Williams (2016)](https://doi.org/10.2134/agronj2016.06.0325). 
+
+```{r}
+#| label: models-t2
+#| output: false
+
+# Piepho & Williams (2016) model as a starter
+
+model_1 <- asreml(fixed = rytha ~ check.cod,
+             random = ~ rowgroup + colgroup + rowgroup:colgroup + rowgroup:rn + colgroup:cn + geno.cod,
+             residual = ~idv(units),
+             na.action = na.method("include"),
+             data = t2, maxinter=50)
+
+
+# Correcting col and row number residuals - autoregression
+
+model_2 <-  asreml(fixed = rytha ~ check.cod,
+             random = ~ rowgroup + colgroup + rowgroup:colgroup + rowgroup:rn + colgroup:cn + geno.cod,
+             residual = ~ ar1(row_number):ar1(col_number),
+             na.action = na.method("include"),
+             data = t2, maxint=50)
+
+# Adding units to random effects (nuggets) + variant autoregression
+
+model_3 <-  asreml(fixed = rytha ~  check.cod,
+             random = ~ rowgroup + colgroup + rowgroup:colgroup + rowgroup:rn + colgroup:cn + geno.cod + units,
+             residual = ~ ar1(row_number):ar1v(col_number),
+             na.action = na.method("include"),
+             data = t2, maxint=50)
+
+model_4 <-  asreml(fixed = rytha ~  check.cod + rowgroup + colgroup,
+             random = ~  rowgroup:colgroup + rowgroup:rn + colgroup:cn + geno.cod + units,
+             residual = ~ ar1(row_number):ar1v(col_number),
+             na.action = na.method("include"),
+             data = t2, maxint=50)
+
+```
+
+### Wald test
+
+In every model, the genetic variance was tested with the LRT test and it was significant. This result indicates that at least two genotypes are statistically different from each other. The same tendency is observed in the checks, that were tested using the Wald test.
+
+:::{.panel-tabset}
+
+### Model 1 
+```{r}
+#| warning: false
+
+#Fixed effects
+wald.asreml(model_1)
+```
+
+### Model 2
+```{r}
+wald.asreml(model_2)
+```
+
+### Model 3
+
+```{r}
+wald.asreml(model_3)
+```
+
+### Model 4
+
+```{r}
+wald.asreml(model_4)
+```
+
+### Model 5
+
+```{r}
+#wald.asreml(model_5)
+```
+
+### Model 6
+
+```{r}
+#wald.asreml(model_6)
+```
+:::
+
+### LRT
+
+```{r}
+#| output: false
+#| warning: false
+#Random effects
+
+red_model1 <- asreml(fixed = rytha ~ check.cod,
+             random = ~ rowgroup + colgroup + rowgroup:colgroup + rowgroup:rn + colgroup:cn,
+             residual = ~idv(units),
+             na.action = na.method("include"),
+             data = t2, maxinter=50)
+
+red_model2 <-  asreml(fixed = rytha ~ check.cod,
+             random = ~ rowgroup + colgroup + rowgroup:colgroup + rowgroup:rn + colgroup:cn,
+             residual = ~ ar1v(row_number):ar1(col_number),
+             na.action = na.method("include"),
+             data = t2, maxint=50)
+
+red_model3 <-  asreml(fixed = rytha ~ rowgroup + colgroup + check.cod,
+             random = ~ rowgroup:colgroup + rowgroup:rn + colgroup:cn + units,
+             residual = ~ ar1v(row_number):ar1(col_number),
+             na.action = na.method("include"),
+             data = t2, maxint=50)
+
+red_model4 <-  asreml(fixed = rytha ~ check.cod +  lin(row_number) + lin(col_number),
+             random = ~ rowgroup + colgroup + rowgroup:colgroup + rowgroup:rn + colgroup:cn + units,
+             residual = ~ ar1(row_number):ar1(col_number),
+             na.action = na.method("include"),
+             data = t2, maxint=50)
+
+#red_model5 <-  asreml(fixed = rytha ~ check.cod,
+             #random = ~ rowgroup + colgroup + rowgroup:colgroup + rowgroup:rn + colgroup:cn + units,
+             #residual = ~ ar1v(rn):ar1(cn),
+             #na.action = na.method("include"),
+             #data = t2, maxint=50)
+
+#red_model6 <-  asreml(fixed = rytha ~ check.cod,
+             #random = ~ rowgroup:rn + colgroup:cn + units,
+             #residual = ~ ar1v(rn):ar1(cn),
+             #na.action = na.method("include"),
+             #data = t2, maxint=50)
+
+lrt(model_1, red_model1)
+lrt(model_2, red_model2)
+lrt(model_3, red_model3)
+lrt(model_4, red_model4)
+#lrt(model_5, red_model5)
+#lrt(model_6, red_model6)
+```
+
+::: {.panel-tabset}
+
+### Model 1
+
+```{r}
+lrt(model_1, red_model1)
+
+```
+
+### Model 2
+
+```{r}
+lrt(model_2, red_model2)
+
+```
+
+### Model 3
+
+```{r}
+lrt(model_3, red_model3)
+
+```
+
+### Model 4
+
+```{r}
+lrt(model_4, red_model4)
+
+```
+
+### Model 5
+
+```{r}
+#lrt(model_5, red_model5)
+
+```
+
+### Model 6
+
+```{r}
+#lrt(model_6, red_model6)
+```
+
+:::
+
+### Semivariograms
+
+Evaluating the semivariograms and the heatmap of root yield, a clear spatial trend can be observed around the center of the superblock. In both visualizations, the central portion of the block exhibits a distinct pattern characterized by lower yields, which corresponds to an almost flat trend in the semivariogram. Even though spatial corrections were applied, this behavior persists. This may indicate a major source of micro-environmental heterogeneity in the field, potentially corresponding to the centerline of the irrigation system or, conversely, a specific zone that did not receive adequate water from the sprinkler irrigation.
+
+```{r}
+#| label: fig-variograms-t1
+#| warning: false
+#| fig-cap: 
+#|   - "Semivariogram for Model 1 (Baseline Model)"
+#|   - "Semivariogram for Model 2 (AR1 × AR1 Residual Structure)"
+#|   - "Semivariogram for Model 3 (Fixed Row/Column Effects + Nugget Effect)"
+#|   - "Semivariogram for Model 4 (Linear Trend + Spatial Adjustment)"
+#|   - "Semivariogram for Model 5 (Adding units to random effects (nuggets))"
+#|   - "Semivariogram for Model 6 (Reduction of model complexity)"
+#|   - "Heatmap of the distribution the root yield in tonnes per ha (rytha) in trial 2 - Rwanda season 2021"
+
+
+plot(varioGram(model_1, type = "default", spatial = "trend",
+formula = ~NULL, composite = TRUE, model = c("empirical"),
+metric = c("euclidean"), angle = 0, angle.tol = 180,
+nlag = 20, maxdist = 0.5, xlag = NA, lag.tol = 0.5, grid = TRUE))
+
+plot(varioGram(model_2, type = "default", spatial = "trend",
+formula = ~NULL, composite = TRUE, model = c("empirical"),
+metric = c("euclidean"), angle = 0, angle.tol = 180,
+nlag = 20, maxdist = 0.5, xlag = NA, lag.tol = 0.5, grid = TRUE))
+
+plot(varioGram(model_3, type = "default", spatial = "trend",
+formula = ~NULL, composite = TRUE, model = c("empirical"),
+metric = c("euclidean"), angle = 0, angle.tol = 180,
+nlag = 20, maxdist = 0.5, xlag = NA, lag.tol = 0.5, grid = TRUE))
+
+plot(varioGram(model_4, type = "default", spatial = "trend",
+formula = ~NULL, composite = TRUE, model = c("empirical"),
+metric = c("euclidean"), angle = 0, angle.tol = 180,
+nlag = 20, maxdist = 0.5, xlag = NA, lag.tol = 0.5, grid = TRUE))
+
+#plot(varioGram(model_5, type = "default", spatial = "trend",
+#formula = ~NULL, composite = TRUE, model = c("empirical"),
+#metric = c("euclidean"), angle = 0, angle.tol = 180,
+#nlag = 20, maxdist = 0.5, xlag = NA, lag.tol = 0.5, grid = TRUE))
+
+#plot(varioGram(model_6, type = "default", spatial = "trend",
+#formula = ~NULL, composite = TRUE, model = c("empirical"),
+#metric = c("euclidean"), angle = 0, angle.tol = 180,
+#nlag = 20, maxdist = 0.5, xlag = NA, lag.tol = 0.5, grid = TRUE))
+
+ggplot(data = t2, aes(x = col_number, y = row_number, fill = rytha)) + 
+  geom_tile() + 
+  theme_minimal() + 
+  theme(text = element_text(size = 12)) + 
+  labs(x = "Column", y = "Row") +
+  scale_fill_viridis_c(option = "magma")
+```
+
+
+### AIC 
+
+This analysis presented results similar to those obtained from the semivariograms. The baseline model (Model 1) exhibited the highest Akaike Information Criterion (AIC) value (8,723.64), indicating the poorest fit. Conversely, Model 6, which incorporated the units term into the random effects to account for the nugget effect, was the best-performing model, yielding an AIC value of 7,982.90—a substantial reduction of 740.74 units.
+
+```{r}
+#| output: false
+#| warning: false
+
+#AIC comparison
+
+modsel = icREML(list(model_1, model_2, model_3, model_4)) #, model_5, model_6)); modsel
+```
+
+:::{.panel-tabset}
+
+### Model 1
+
+```{r}
+icREML(list(model_1))
+```
+
+### Model 2
+
+```{r}
+icREML(list(model_2))
+```
+
+### Model 3
+
+```{r}
+icREML(list(model_3))
+```
+
+### Model 4
+
+```{r}
+icREML(list(model_4))
+```
+
+### Model 5
+
+```{r}
+icREML(list(model_5))
+```
+
+### Model 6
+
+```{r}
+icREML(list(model_6))
+```
+
+:::
+
+### Variance components
+
+:::{.panel-tabset}
+
+### Model 1
+```{r}
+# Variance components
+
+varcomp_m1 <- summary(model_1)$varcomp
+varcomp_m1 |> 
+  kbl(caption = "Variance components for Model 1.", digits = 4) |> 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+
+```
+
+### Model 2 
+
+```{r}
+varcomp_m2 <- summary(model_2)$varcomp
+varcomp_m2|> 
+  kbl(caption = "Variance components for Model 2.", digits = 4) |> 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+```
+
+### Model 3
+
+```{r}
+varcomp_m3 <- summary(model_3)$varcomp
+varcomp_m3|> 
+  kbl(caption = "Variance components for Model 3.", digits = 4) |> 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+```
+
+### Model 4
+
+```{r}
+varcomp_m4 <- summary(model_4)$varcomp
+varcomp_m4|> 
+  kbl(caption = "Variance components for Model 4.", digits = 4) |> 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+```
+
+### Model 5
+
+```{r}
+varcomp_m5 <- summary(model_5)$varcomp 
+varcomp_m5|> 
+  kbl(caption = "Variance components for Model 5.", digits = 4) |> 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+
+```
+
+### Model 6
+
+```{r}
+varcomp_m6 <- summary(model_6)$varcomp
+varcomp_m6|> 
+  kbl(caption = "Variance components for Model 6.", digits = 4) |> 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+```
+
+:::
+
+### Ranking 
+
+```{r}
+#| label: t1-blups
+
+#BLUPs
+blup1 <- predict.asreml(model_1, classify = "geno.cod", sed = TRUE)
+blup2 <- predict.asreml(model_2, classify = "geno.cod", sed = TRUE)
+blup3 <- predict.asreml(model_3, classify = "geno.cod", sed = TRUE)
+blup4 <- predict.asreml(model_4, classify = "geno.cod", sed = TRUE)
+blup5 <- predict.asreml(model_5, classify = "geno.cod", sed = TRUE)
+blup6 <- predict.asreml(model_6, classify = "geno.cod", sed = TRUE)
+
+blup <- list(blup1, blup2, blup3, blup4, blup5, blup6)
+predic_value_1 <- list()
+
+for (i in 1:length(blup)) {
+  
+  predic_value_1[[i]] <- blup[[i]]$pvals |> 
+    dplyr::select(predicted.value, dplyr::everything()) |> 
+    dplyr::arrange(desc(predicted.value))
+
+}
+
+#blues - average of all checks together
+blues_checks1 <- predict(model_1, classify = "check.cod")$pvals
+blues_checks2 <- predict(model_2, classify = "check.cod")$pvals
+blues_checks3 <- predict(model_3, classify = "check.cod")$pvals
+blues_checks4 <- predict(model_4, classify = "check.cod")$pvals
+blues_checks5 <- predict(model_5, classify = "check.cod")$pvals
+blues_checks6 <- predict(model_6, classify = "check.cod")$pvals
+
+blue <- list(blues_checks1, blues_checks2, blues_checks3, blues_checks4, blues_checks5, blues_checks6)
+bpredic_value_1 <- list()
+
+for (i in 1:length(blue)) {
+  
+  bpredic_value_1[[i]] <- blue[[i]] |> 
+        dplyr::filter(check.cod != "Candidato") |>
+    dplyr::select(predicted.value, dplyr::everything()) |> 
+    dplyr::arrange(desc(predicted.value))  
+}
+
+## Graph
+aux <- rbind(
+  blup1$pvals |>
+    mutate(
+      model = 'model 1'
+    ),
+  blup5$pvals |> mutate(
+    model = 'model 5'
+  )
+)
+
+ggplot(data = aux, aes(x = model, y = predicted.value)) +
+  geom_point(size = 3, alpha = .5, color = "green") +
+  geom_line(aes(group = geno.cod), linewidth = 1.3, alpha = .4, color = "#10342d") +
+  theme_minimal() + 
+  labs(x = "Model", y = "Yield (BLUP)") + 
+  theme(text = element_text(size = 20))
+```
+
+### Broad-sense Heritability
+
+```{r}
+#| label: tbl-heritability-t1
+#| tbl-cap: Broad-sense Heritability of the different models to spatial correction
+
+# Heritabilities - Generalized heritability
+h2_mod1 <- 1-(mean(blup1$sed[upper.tri(blup1$sed)]^2)/(2*varcomp_m1[6,1])); h2_mod1
+h2_mod2 <- 1-(mean(blup2$sed[upper.tri(blup2$sed)]^2)/(2*varcomp_m2[6,1])); h2_mod2
+h2_mod3 <- 1-(mean(blup3$sed[upper.tri(blup3$sed)]^2)/(2*varcomp_m3[4,1])); h2_mod3
+h2_mod4 <- 1-(mean(blup4$sed[upper.tri(blup4$sed)]^2)/(2*varcomp_m4[6,1])); h2_mod4
+h2_mod5 <- 1-(mean(blup5$sed[upper.tri(blup5$sed)]^2)/(2*varcomp_m5[6,1])); h2_mod5
+h2_mod6 <- 1-(mean(blup6$sed[upper.tri(blup6$sed)]^2)/(2*varcomp_m6[3,1])); h2_mod6
+
+h2 <- data.frame(
+  Model = c("Model 1", "Model 2", "Model 3", "Model 4", "Model 5", "Model 6"),
+  H2 = c(h2_mod1, h2_mod2, h2_mod3, h2_mod4, h2_mod5, h2_mod6)
+)
+
+options(knitr.table.format = "html")
+
+h2 |> 
+  kbl(caption = " ", digits = 2) |> 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE) 
+```
 
 
 
