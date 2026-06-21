@@ -648,8 +648,8 @@ data <- data |>
     colgroup = as.factor(colgroup),
     check = as.factor(check),
     geno = as.factor(geno),
-    rn = as.numeric(row_number), # Crucial para M5 e M6
-    cn = as.numeric(col_number)  # Crucial para M5 e M6
+    rn = as.numeric(row_number),
+    cn = as.numeric(col_number)
   )
 ```
 
