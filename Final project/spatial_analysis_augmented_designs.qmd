@@ -1,0 +1,3045 @@
+---
+title: "Spatial analysis of augmented designs in sweet potato"
+author: 
+  - name: Bruna Moreno, Daniele Bononi, João Vitor Calvo, Renan Fantine
+    affiliation:
+      - name: Department of Genetics, ESALQ-USP
+        city: Piracicaba, São Paulo, Brazil
+format: 
+  html:
+    toc: true
+    toc-location: left
+    code-overflow: wrap
+    code-fold: true
+    fig-align: center
+    theme: 
+      light: journal
+      dark: darkly
+    embed-resources: true
+    include-in-header:
+      text: |
+        <style>
+        body {
+          text-align: justify;
+        }
+        </style>
+crossref: {}
+editor: 
+  markdown: 
+    wrap: 72
+---
+
+# Exercise
+
+The dataset available here has six trials laid out in an augmented
+row-column design (more details about this design here). Analyse each
+trial individually with increasing order of spatial adjustment. Report
+the improvement of the modelling (if any) when spatial trends are dealt
+with. Your report should have differences in the variance components,
+broad-sense heritabilities, and rankings. For each trial, determine the
+best model using semivariograms and the AIC. Don't forget that models
+with different fixed effects must be compared using the adjusted version
+of the AIC available on the lmmtools package.
+
+# Introduction
+
+This report provides a data analysis of a spatial correction of a
+multi-environment sweet potato experiment in Africa. Each one of the six
+environments were analyzed with multiple models testing different
+approaches to spatial correction. It was estimated variance components,
+broad-sense heritabilities (Cullis, 2006), and rankings based on BLUP
+predictions.
+
+```{r}
+#| label: setup
+#| include: false
+
+knitr::opts_chunk$set(
+  fig.show = "hold",
+  warning = FALSE,
+  message = FALSE,
+  results = "hold")
+```
+
+The trials were conducted across Uganda in three locations (Rwebitaba -
+RWE, Namulonge - NAM and Serere - SER) during the 2021 and 2022 growing
+seasons. To account for spatial variation, each trial was analyzed
+individually to implement single-trial spatial corrections.
+
+This dataset is derived from a multi-environment sweet potato trial. The
+experimental layout follows an augmented row-column design, where each
+environment comprises a grid of 50 rows and 30 columns. These rows are
+grouped into 5 super-rows, and the columns into 3 super-columns. Each
+resulting combination (hereafter referred to as a miniblock) consists of
+10 rows and 10 columns, encompassing a total of 8 checks and 1,178 test
+genotypes.
+
+The model used in this report was the same described in the article of
+[Piepho & Williams (2016)](https://doi.org/10.2134/agronj2016.06.0325),
+which can be represented as the model below:
+
+$$ y = \mu + rowgroup + colgroup + rowgroup.colgroup + rowgroup.row + colgroup.col + genotype + check + \epsilon$$
+
+Where, $\mu$ is the intercept,
+
+$rowgroup$ is the effect of the super-row,
+
+$colgroup$ is the effect of the super-column,
+
+$rowgroup.colgroup$ is the effect of the intersection of super-row and
+super-column (the miniblock),
+
+$rowgroup.row$ the random effect of the row number nested in the
+super-row,
+
+$colgroup.col$ the random effect of the column number nested in the
+super-column,
+
+$genotype$ the random effect of the genotype,
+
+$check$ the fixed effect of the check and
+
+$\epsilon$ the random effect of the error.
+
+In order to verify the spatial correction, each trial was analysed
+individually, through five different models:
+
+-   Model 1: Reference model (the same described in [Piepho & Williams
+    (2016)](https://doi.org/10.2134/agronj2016.06.0325)), considering
+    row and column groups as random
+
+-   Model 2: Same as 'Model 1', but using row and column groups as fixed
+
+-   Model 3: 'Model 1' + residuals with AR1 structure
+
+-   Model 4: 'Model 1' + residuals with AR1 structure + nugget effect
+
+-   Model 5: 'Model 1' + residuals with AR1 structure + nugget effect +
+    linear trend across row and columns
+
+After that, for each trial/model combination, check effects (fixed
+effects) were tested using Wald tests, whereas candidate genotype
+effects (random effects) were evaluated using likelihood ratio tests
+(LRT). The semi-variograms, spatial distribution of residuals, and AIC
+values were then assessed to select the most appropriate model for each
+trial.
+
+```{r}
+#| label: trials-data
+#| warning: false
+
+# Loading packages
+packages <- c("ggplot2", "patchwork", "tidyr", "dplyr", "purrr", "knitr", "kableExtra", "grid","ggcorrplot", "asreml", "lmmtools")
+invisible(lapply(packages, function(p){
+  suppressMessages(suppressPackageStartupMessages(
+  suppressWarnings(library(p, character.only = TRUE))))}))
+
+# Loading phenotypic data 
+data = read.csv("https://raw.githubusercontent.com/ufv-molecular-breeding-lab/schaves_sweetpotato_two_stage/refs/heads/main/Data/Phenotype.csv", sep = ',')
+
+data$row_number <- as.factor(data$row_number)
+data$col_number <- as.factor(data$col_number)
+data$rowgroup <- as.factor(data$rowgroup)
+data$colgroup <- as.factor(data$colgroup)
+data$check <- as.factor(data$check)
+data$geno <- as.factor(data$geno)
+data$check.cod = as.factor(data$check.cod)
+data$geno.cod  = as.factor(data$geno.cod)
+```
+
+```{r}
+#| label: blup_comparison
+blup_comparison <- function(model1, model2, m1_name = "Model 1", m2_name = "Best Model") {
+  
+  blup_m1 <- model1[,c("geno.cod", "predicted.value")]
+  colnames(blup_m1) <- c('geno.cod','blup.m1')
+  blup_m2 <- model2[,c("geno.cod", "predicted.value")]
+  colnames(blup_m2) <- c('geno.cod','blup.m2')
+  comparison <- merge(blup_m1,blup_m2,by = "geno.cod")
+  ngen <- nrow(comparison) # number of genotypes
+  
+  # Rankings
+  comparison <- comparison |> 
+    mutate(rank.m1 = rank(-blup.m1, ties.method = "average"),
+      rank.m2 = rank(-blup.m2, ties.method = "average"),
+      blup_diff = abs(blup.m1 - blup.m2),
+      rank_diff = rank.m1 - rank.m2)
+  
+  rank_cor <- cor(comparison$blup.m1, comparison$blup.m2, method = "spearman") # Spearman correlation (Pearson correlation between ranks)
+  pearson_cor <- cor(comparison$blup.m1, comparison$blup.m2, method = "pearson") # Pearson correlation between blups
+  
+  # Summary metrics
+  metrics <- data.frame(
+    n_genotypes = nrow(comparison),
+    pearson_correlation = pearson_cor,
+    spearman_correlation = rank_cor,
+    mean_blup_diff = mean(comparison$blup_diff),
+    sd_blup_diff = sd(comparison$blup_diff),
+    min_blup_diff = min(comparison$blup_diff),
+    max_blup_diff = max(comparison$blup_diff),
+    sd_rank_diff = sd(comparison$rank_diff),
+    min_rank_diff = min(abs(comparison$rank_diff)),
+    max_rank_diff = max(abs(comparison$rank_diff))
+    )
+  
+  # Rankings plot
+  ranking_plot <- plotly::ggplotly(
+    ggplot(comparison,aes(x = rank.m1,y = rank.m2)) +
+    geom_point(aes(color = geno.cod),size = 2) +
+    theme(axis.line = element_line(colour = "black"),
+      legend.position = "none",
+      panel.background = element_blank(),
+      text = element_text(size = 14)) +
+    labs(x = paste(m1_name, "- Ranking (M1)"),
+      y = paste(m2_name, "- Ranking (M2)"),
+      title = paste("Spearman correlation =", round(rank_cor, 4))))
+
+  # BLUPs scatterplot
+  blup_plot <- ggplot(comparison, aes(x = blup.m1, y = blup.m2)) +
+    geom_point(size = 2) +
+    geom_abline(slope = 1, intercept = 0, linetype = 2) +
+    theme_bw() +
+    labs(x = paste(m1_name, "- BLUP"),
+      y = paste(m2_name, "- BLUP"),
+      title = paste("Pearson correlation =", round(pearson_cor,4)))
+  
+  return(list(comparison_table = comparison,
+    metrics = metrics,
+    ranking_plot = ranking_plot,
+    blup_plot = blup_plot))
+  
+    }
+```
+
+# Namulonge Season 2022/1 (Trial 1 - OT1NAM22)
+
+```{r}
+#| label: fig-t1-prod
+
+t1 <- data |> filter (env == "OT1NAM22")
+
+# Modifying the geno.cod and check.cod columns
+t1 <- t1 |> 
+  mutate(
+    check.cod = ifelse(is.na(check.cod), "Candidato", as.character(check.cod)),
+    geno.cod  = ifelse(is.na(geno.cod), "Testemunha", as.character(geno.cod))
+  ) |> 
+  mutate(
+    check.cod = as.factor(check.cod),
+    geno.cod  = as.factor(geno.cod),
+    rowgroup  = as.factor(rowgroup),
+    colgroup  = as.factor(colgroup),
+    rn        = as.factor(rn),
+    cn        = as.factor(cn))
+
+# Identifying checks with no valid observations
+# t1 |> 
+#   group_by(check.cod) |>
+#   summarise(n_total = n(),
+#             n_na = sum(is.na(rytha)),
+#             n_obs = sum(!is.na(rytha))) |>
+#   arrange(n_obs)
+```
+
+```{r}
+#| label: models-t1
+#| output: false
+
+# Model 1 - Piepho & Williams (2016) model as a starter
+model_1_t1 <- asreml(fixed = rytha ~ check.cod,
+             random = ~ rowgroup + colgroup + rowgroup:colgroup + rowgroup:rn + colgroup:cn + geno.cod,
+             residual = ~idv(units),
+             na.action = na.method("include"),
+             data = t1, maxinter=50)
+
+# Model 2 - Row and column groups as fixed
+model_2_t1 <-  asreml(fixed = rytha ~ rowgroup + colgroup + rowgroup:colgroup + check.cod,
+             random = ~ rowgroup:rn + colgroup:cn + geno.cod,
+             residual = ~ idv(units),
+             na.action = na.method("include"),
+             data = t1, maxint=50)
+
+# Model 3 - AR1 in residuals
+model_3_t1 <-  asreml(fixed = rytha ~ check.cod,
+             random = ~ rowgroup + colgroup + rowgroup:colgroup + rowgroup:rn + colgroup:cn + geno.cod,
+             residual = ~ ar1v(row_number):ar1(col_number),
+             na.action = na.method("include"),
+             data = t1, maxint=50)
+
+# Model 4 - AR1 in residuals + nugget effect
+model_4_t1 <-  asreml(fixed = rytha ~ check.cod,
+             random = ~ rowgroup + colgroup + rowgroup:colgroup + rowgroup:rn + colgroup:cn + geno.cod + units,
+             residual = ~ ar1v(row_number):ar1(col_number),
+             na.action = na.method("include"),
+             data = t1, maxint=50)
+
+# Model 5 - AR1 in residuals + nugget effect + row/column as covariables
+model_5_t1 <-  asreml(fixed = rytha ~ check.cod +  lin(row_number) + lin(col_number),
+             random = ~ rowgroup + colgroup + rowgroup:colgroup + rowgroup:rn + colgroup:cn + geno.cod + units,
+             residual = ~ ar1v(row_number):ar1(col_number),
+             na.action = na.method("include"),
+             data = t1, maxint=50)
+
+```
+
+### Variance components {#sec-VC1}
+
+::: panel-tabset
+### Model 1
+
+```{r}
+varcomp_m1_t1 <- summary(model_1_t1)$varcomp
+varcomp_m1_t1 |> 
+  kbl(caption = "Variance components for Model 1.", digits = 4) |> 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+
+```
+
+### Model 2
+
+```{r}
+varcomp_m2_t1 <- summary(model_2_t1)$varcomp
+varcomp_m2_t1 |> 
+  kbl(caption = "Variance components for Model 2.", digits = 4) |> 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+```
+
+### Model 3
+
+```{r}
+varcomp_m3_t1 <- summary(model_3_t1)$varcomp
+varcomp_m3_t1 |> 
+  kbl(caption = "Variance components for Model 3.", digits = 4) |> 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+```
+
+### Model 4
+
+```{r}
+varcomp_m4_t1 <- summary(model_4_t1)$varcomp
+varcomp_m4_t1 |> 
+  kbl(caption = "Variance components for Model 4.", digits = 4) |> 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+```
+
+### Model 5
+
+```{r}
+varcomp_m5_t1 <- summary(model_5_t1)$varcomp
+varcomp_m5_t1 |> 
+  kbl(caption = "Variance components for Model 5.", digits = 4) |> 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+
+```
+:::
+
+### Wald test
+
+::: panel-tabset
+### Model 1
+
+```{r}
+#| warning: false
+
+#Fixed effects
+wald.asreml(model_1_t1)
+```
+
+### Model 2
+
+```{r}
+wald.asreml(model_2_t1)
+```
+
+### Model 3
+
+```{r}
+wald.asreml(model_3_t1)
+```
+
+### Model 4
+
+```{r}
+wald.asreml(model_4_t1)
+```
+
+### Model 5
+
+```{r}
+wald.asreml(model_5_t1)
+```
+:::
+
+### LRT
+
+```{r}
+#| output: false
+
+#Random effects
+red_model1_t1 <- asreml(fixed = rytha ~ check.cod,
+             random = ~ rowgroup + colgroup + rowgroup:colgroup + rowgroup:rn + colgroup:cn,
+             residual = ~idv(units),
+             na.action = na.method("include"),
+             data = t1, maxinter=50)
+
+red_model2_t1 <-  asreml(fixed = rytha ~ rowgroup + colgroup + rowgroup:colgroup + check.cod,
+             random = ~ rowgroup:rn + colgroup:cn,
+             residual = ~ idv(units),
+             na.action = na.method("include"),
+             data = t1, maxint=50)
+
+red_model3_t1 <-  asreml(fixed = rytha ~ check.cod,
+             random = ~ rowgroup + colgroup + rowgroup:colgroup + rowgroup:rn + colgroup:cn,
+             residual = ~ ar1v(row_number):ar1(col_number),
+             na.action = na.method("include"),
+             data = t1, maxint=50)
+
+red_model4_t1 <-  asreml(fixed = rytha ~ check.cod,
+             random = ~ rowgroup + colgroup + rowgroup:colgroup + rowgroup:rn + colgroup:cn + units,
+             residual = ~ ar1v(row_number):ar1(col_number),
+             na.action = na.method("include"),
+             data = t1, maxint=50)
+
+red_model5_t1 <-  asreml(fixed = rytha ~ check.cod +  lin(row_number) + lin(col_number),
+             random = ~ rowgroup + colgroup + rowgroup:colgroup + rowgroup:rn + colgroup:cn + units,
+             residual = ~ ar1v(row_number):ar1(col_number),
+             na.action = na.method("include"),
+             data = t1, maxint=50)
+```
+
+::: panel-tabset
+### Model 1
+
+```{r}
+lrt(model_1_t1, red_model1_t1)
+
+```
+
+### Model 2
+
+```{r}
+lrt(model_2_t1, red_model2_t1)
+
+```
+
+### Model 3
+
+```{r}
+lrt(model_3_t1, red_model3_t1)
+```
+
+### Model 4
+
+```{r}
+lrt(model_4_t1, red_model4_t1)
+
+```
+
+### Model 5
+
+```{r}
+lrt(model_5_t1, red_model5_t1)
+
+```
+:::
+
+### Semivariograms
+
+```{r}
+#| label: fig-variograms-t1
+#| warning: false
+#| fig-cap: 
+#|   - "Semivariogram for Model 1 (Baseline Model)"
+#|   - "Semivariogram for Model 2 (Row and column groups as fixed)"
+#|   - "Semivariogram for Model 3 (AR1 in residuals)"
+#|   - "Semivariogram for Model 4 (AR1 in residuals + nugget effect)"
+#|   - "Semivariogram for Model 5 (AR1 in residuals + nugget effect + linear trend)"
+
+plot(varioGram(model_1_t1, type = "default", spatial = "trend",
+formula = ~NULL, composite = TRUE, model = c("empirical"),
+metric = c("euclidean"), angle = 0, angle.tol = 180,
+nlag = 20, maxdist = 0.5, xlag = NA, lag.tol = 0.5, grid = TRUE))
+
+plot(varioGram(model_2_t1, type = "default", spatial = "trend",
+formula = ~NULL, composite = TRUE, model = c("empirical"),
+metric = c("euclidean"), angle = 0, angle.tol = 180,
+nlag = 20, maxdist = 0.5, xlag = NA, lag.tol = 0.5, grid = TRUE))
+
+plot(varioGram(model_3_t1, type = "default", spatial = "trend",
+formula = ~NULL, composite = TRUE, model = c("empirical"),
+metric = c("euclidean"), angle = 0, angle.tol = 180,
+nlag = 20, maxdist = 0.5, xlag = NA, lag.tol = 0.5, grid = TRUE))
+
+plot(varioGram(model_4_t1, type = "default", spatial = "trend",
+formula = ~NULL, composite = TRUE, model = c("empirical"),
+metric = c("euclidean"), angle = 0, angle.tol = 180,
+nlag = 20, maxdist = 0.5, xlag = NA, lag.tol = 0.5, grid = TRUE))
+
+plot(varioGram(model_5_t1, type = "default", spatial = "trend",
+formula = ~NULL, composite = TRUE, model = c("empirical"),
+metric = c("euclidean"), angle = 0, angle.tol = 180,
+nlag = 20, maxdist = 0.5, xlag = NA, lag.tol = 0.5, grid = TRUE))
+
+```
+
+### AIC {#sec-AIC1}
+
+```{r}
+#| output: false
+#| warning: false
+
+#AIC comparison
+
+modsel_t1 = icREML(list(model_1_t1, model_2_t1, model_3_t1, model_4_t1, model_5_t1)); modsel_t1
+modsel_t1 <- as.data.frame(modsel_t1)
+
+```
+
+::: panel-tabset
+### Model 1
+
+```{r}
+icREML(list(model_1_t1))
+```
+
+### Model 2
+
+```{r}
+icREML(list(model_2_t1))
+```
+
+### Model 3
+
+```{r}
+icREML(list(model_3_t1))
+```
+
+### Model 4
+
+```{r}
+icREML(list(model_4_t1))
+```
+
+### Model 5
+
+```{r}
+icREML(list(model_5_t1))
+```
+:::
+
+### Spatial Distribution of Residuals
+
+```{r}
+#| label: fig-resplot-t1
+#| fig-cap: "Spatial Distribution of residuals (Trial 1)"
+resid_long <- t1 %>%
+  mutate(
+    row_number = as.numeric(as.character(row_number)),
+    col_number = as.numeric(as.character(col_number)),
+    Model_1 = residuals(model_1_t1, type = "response"),
+    Model_2 = residuals(model_2_t1, type = "response"),
+    Model_3 = residuals(model_3_t1, type = "response"),
+    Model_4 = residuals(model_4_t1, type = "response"),
+    Model_5 = residuals(model_5_t1, type = "response"))  |> 
+  pivot_longer(
+    cols = starts_with("Model_"),
+    names_to = "Model",
+    values_to = "Residual")
+
+lim <- max(abs(resid_long$Residual), na.rm = TRUE)
+
+ggplot(
+  resid_long,
+  aes(
+    x = col_number,
+    y = row_number,
+    fill = Residual
+  )
+) +
+  geom_tile(color = "white", linewidth = 0.2) +
+  scale_fill_gradient2(
+  low = "#2166AC",
+  mid = "#F7F7F7",
+  high = "#B35806",
+  midpoint = 0,
+  limits = c(-lim, lim)) +
+  coord_fixed() +
+  scale_y_reverse() +
+  facet_wrap(~Model) +
+  theme_minimal() +
+  labs(
+    title = "Spatial distribution of residuals",
+    x = "Column",
+    y = "Row"
+  )
+```
+
+### Best Model and Ranking
+
+```{r}
+#| label: t1-blups
+#| results: hide
+
+#BLUPs
+blup1_t1 <- predict.asreml(model_1_t1, classify = "geno.cod", sed = TRUE)
+blup2_t1 <- predict.asreml(model_2_t1, classify = "geno.cod", sed = TRUE)
+blup3_t1 <- predict.asreml(model_3_t1, classify = "geno.cod", sed = TRUE)
+blup4_t1 <- predict.asreml(model_4_t1, classify = "geno.cod", sed = TRUE)
+blup5_t1 <- predict.asreml(model_5_t1, classify = "geno.cod", sed = TRUE)
+
+blup_t1 <- list(blup1_t1, blup2_t1, blup3_t1, blup4_t1, blup5_t1)
+predic_value_t1 <- list()
+
+for (i in 1:length(blup_t1)) {
+  
+  predic_value_t1[[i]] <- blup_t1[[i]]$pvals |> 
+    dplyr::select(predicted.value, dplyr::everything()) |> 
+    dplyr::arrange(desc(predicted.value))
+
+}
+
+#blues - average of all checks together
+blues_checks1_t1 <- predict(model_1_t1, classify = "check.cod")$pvals
+blues_checks2_t1 <- predict(model_2_t1, classify = "check.cod")$pvals
+blues_checks3_t1 <- predict(model_3_t1, classify = "check.cod")$pvals
+blues_checks4_t1 <- predict(model_4_t1, classify = "check.cod")$pvals
+blues_checks5_t1 <- predict(model_5_t1, classify = "check.cod")$pvals
+
+blue_t1 <- list(blues_checks1_t1, blues_checks2_t1, blues_checks3_t1, blues_checks4_t1, blues_checks5_t1)
+bpredic_value_t1 <- list()
+
+for (i in 1:length(blue_t1)) {
+  
+  bpredic_value_t1[[i]] <- blue_t1[[i]] |> 
+        dplyr::filter(check.cod != "Candidato") |>
+    dplyr::select(predicted.value, dplyr::everything()) |> 
+    dplyr::arrange(desc(predicted.value))  
+}
+```
+
+```{r}
+#| label: fig-h2-t1
+#| fig-cap: "BLUPs ranking correlation (Trial 1)"
+#| 
+# Selecting baseline model and best model
+t1_comp <- blup_comparison(blup1_t1$pvals, blup4_t1$pvals, m1_name = "Model 1", m2_name = "Best Model")
+
+t1_comp$ranking_plot
+```
+
+### Broad-sense Heritability
+
+```{r}
+#| label: tbl-heritability-t1
+#| tbl-cap: Broad-sense Heritability (Cullis, 2006) of the different models to spatial correction
+
+# Heritabilities - Generalized heritability
+h2_mod1_t1 <- 1-(mean(blup1_t1$sed[upper.tri(blup1_t1$sed)]^2)/(2*varcomp_m1_t1[6,1]))
+h2_mod2_t1 <- 1-(mean(blup2_t1$sed[upper.tri(blup2_t1$sed)]^2)/(2*varcomp_m2_t1[3,1]))
+h2_mod3_t1 <- 1-(mean(blup3_t1$sed[upper.tri(blup3_t1$sed)]^2)/(2*varcomp_m3_t1[6,1]))
+h2_mod4_t1 <- 1-(mean(blup4_t1$sed[upper.tri(blup4_t1$sed)]^2)/(2*varcomp_m4_t1[6,1]))
+h2_mod5_t1 <- 1-(mean(blup5_t1$sed[upper.tri(blup5_t1$sed)]^2)/(2*varcomp_m5_t1[6,1]))
+
+h2_t1 <- data.frame(
+  Model = c("Model 1", "Model 2", "Model 3", "Model 4", "Model 5"),
+  H2 = c(h2_mod1_t1, h2_mod2_t1, h2_mod3_t1, h2_mod4_t1, h2_mod5_t1)
+)
+
+options(knitr.table.format = "html")
+
+h2_t1 |> 
+  kbl(caption = " ", digits = 2) |> 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE) 
+```
+
+# Rwebitaba Season 2021/1 (Trial 2 - OT1RWE21)
+
+```{r}
+#| label: fig-t2-prod
+
+t2 <- data |> filter (env == "OT1RWE21")
+
+# Modifying the geno.cod and check.cod columns
+t2 <- t2 |> 
+  mutate(
+    check.cod = ifelse(is.na(check.cod), "Candidato", as.character(check.cod)),
+    geno.cod  = ifelse(is.na(geno.cod), "Testemunha", as.character(geno.cod))
+  ) |> 
+  mutate(
+    check.cod = as.factor(check.cod),
+    geno.cod  = as.factor(geno.cod),
+    rowgroup  = as.factor(rowgroup),
+    colgroup  = as.factor(colgroup),
+    rn        = as.factor(rn),
+    cn        = as.factor(cn))
+
+# Identifying checks with no valid observations
+# t2 |> 
+#   group_by(check.cod) |>
+#   summarise(n_total = n(),
+#             n_na = sum(is.na(rytha)),
+#             n_obs = sum(!is.na(rytha))) |>
+#   arrange(n_obs)
+```
+
+```{r}
+#| label: models-t2
+#| output: false
+
+# Model 1 - Piepho & Williams (2016) model as a starter
+model_1_t2 <- asreml(fixed = rytha ~ check.cod,
+             random = ~ rowgroup + colgroup + rowgroup:colgroup + rowgroup:rn + colgroup:cn + geno.cod,
+             residual = ~idv(units),
+             na.action = na.method("include"),
+             data = t2, maxinter=50)
+
+# Model 2 - Row and column groups as fixed
+model_2_t2 <-  asreml(fixed = rytha ~ rowgroup + colgroup + rowgroup:colgroup + check.cod,
+             random = ~ rowgroup:rn + colgroup:cn + geno.cod,
+             residual = ~ idv(units),
+             na.action = na.method("include"),
+             data = t2, maxint=50)
+
+# Model 3 - AR1 in residuals
+model_3_t2 <-  asreml(fixed = rytha ~ check.cod,
+             random = ~ rowgroup + colgroup + rowgroup:colgroup + rowgroup:rn + colgroup:cn + geno.cod,
+             residual = ~ ar1v(row_number):ar1(col_number),
+             na.action = na.method("include"),
+             data = t2, maxint=50)
+
+# Model 4 - AR1 in residuals + nugget effect
+model_4_t2 <-  asreml(fixed = rytha ~ check.cod,
+             random = ~ rowgroup + colgroup + rowgroup:colgroup + rowgroup:rn + colgroup:cn + geno.cod + units,
+             residual = ~ ar1v(row_number):ar1(col_number),
+             na.action = na.method("include"),
+             data = t2, maxint=50)
+
+# Model 5 - AR1 in residuals + nugget effect + row/column as covariables
+model_5_t2 <-  asreml(fixed = rytha ~ check.cod +  lin(row_number) + lin(col_number),
+             random = ~ rowgroup + colgroup + rowgroup:colgroup + rowgroup:rn + colgroup:cn + geno.cod + units,
+             residual = ~ ar1v(row_number):ar1(col_number),
+             na.action = na.method("include"),
+             data = t2, maxint=50)
+
+```
+
+### Variance components {#sec-VC2}
+
+::: panel-tabset
+### Model 1
+
+```{r}
+varcomp_m1_t2 <- summary(model_1_t2)$varcomp
+varcomp_m1_t2 |> 
+  kbl(caption = "Variance components for Model 1.", digits = 4) |> 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+
+```
+
+### Model 2
+
+```{r}
+varcomp_m2_t2 <- summary(model_2_t2)$varcomp
+varcomp_m2_t2 |> 
+  kbl(caption = "Variance components for Model 2.", digits = 4) |> 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+```
+
+### Model 3
+
+```{r}
+varcomp_m3_t2 <- summary(model_3_t2)$varcomp
+varcomp_m3_t2 |> 
+  kbl(caption = "Variance components for Model 3.", digits = 4) |> 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+```
+
+### Model 4
+
+```{r}
+varcomp_m4_t2 <- summary(model_4_t2)$varcomp
+varcomp_m4_t2 |> 
+  kbl(caption = "Variance components for Model 4.", digits = 4) |> 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+```
+
+### Model 5
+
+```{r}
+varcomp_m5_t2 <- summary(model_5_t2)$varcomp
+varcomp_m5_t2 |> 
+  kbl(caption = "Variance components for Model 5.", digits = 4) |> 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+
+```
+:::
+
+### Wald test
+
+::: panel-tabset
+### Model 1
+
+```{r}
+#| warning: false
+
+#Fixed effects
+wald.asreml(model_1_t2)
+```
+
+### Model 2
+
+```{r}
+wald.asreml(model_2_t2)
+```
+
+### Model 3
+
+```{r}
+wald.asreml(model_3_t2)
+```
+
+### Model 4
+
+```{r}
+wald.asreml(model_4_t2)
+```
+
+### Model 5
+
+```{r}
+wald.asreml(model_5_t2)
+```
+:::
+
+### LRT
+
+```{r}
+#| output: false
+
+#Random effects
+red_model1_t2 <- asreml(fixed = rytha ~ check.cod,
+             random = ~ rowgroup + colgroup + rowgroup:colgroup + rowgroup:rn + colgroup:cn,
+             residual = ~idv(units),
+             na.action = na.method("include"),
+             data = t2, maxinter=50)
+
+red_model2_t2 <-  asreml(fixed = rytha ~ rowgroup + colgroup + rowgroup:colgroup + check.cod,
+             random = ~ rowgroup:rn + colgroup:cn,
+             residual = ~ idv(units),
+             na.action = na.method("include"),
+             data = t2, maxint=50)
+
+red_model3_t2 <-  asreml(fixed = rytha ~ check.cod,
+             random = ~ rowgroup + colgroup + rowgroup:colgroup + rowgroup:rn + colgroup:cn,
+             residual = ~ ar1v(row_number):ar1(col_number),
+             na.action = na.method("include"),
+             data = t2, maxint=50)
+
+red_model4_t2 <-  asreml(fixed = rytha ~ check.cod,
+             random = ~ rowgroup + colgroup + rowgroup:colgroup + rowgroup:rn + colgroup:cn + units,
+             residual = ~ ar1v(row_number):ar1(col_number),
+             na.action = na.method("include"),
+             data = t2, maxint=50)
+
+red_model5_t2 <-  asreml(fixed = rytha ~ check.cod +  lin(row_number) + lin(col_number),
+             random = ~ rowgroup + colgroup + rowgroup:colgroup + rowgroup:rn + colgroup:cn + units,
+             residual = ~ ar1v(row_number):ar1(col_number),
+             na.action = na.method("include"),
+             data = t2, maxint=50)
+```
+
+::: panel-tabset
+### Model 1
+
+```{r}
+lrt(model_1_t2, red_model1_t2)
+
+```
+
+### Model 2
+
+```{r}
+lrt(model_2_t2, red_model2_t2)
+
+```
+
+### Model 3
+
+```{r}
+lrt(model_3_t2, red_model3_t2)
+```
+
+### Model 4
+
+```{r}
+lrt(model_4_t2, red_model4_t2)
+
+```
+
+### Model 5
+
+```{r}
+lrt(model_5_t2, red_model5_t2)
+
+```
+:::
+
+### Semivariograms
+
+```{r}
+#| label: fig-variograms-t2
+#| warning: false
+#| fig-cap: 
+#|   - "Semivariogram for Model 1 (Baseline Model)"
+#|   - "Semivariogram for Model 2 (Row and column groups as fixed)"
+#|   - "Semivariogram for Model 3 (AR1 in residuals)"
+#|   - "Semivariogram for Model 4 (AR1 in residuals + nugget effect)"
+#|   - "Semivariogram for Model 5 (AR1 in residuals + nugget effect + linear trend)"
+
+plot(varioGram(model_1_t2, type = "default", spatial = "trend",
+formula = ~NULL, composite = TRUE, model = c("empirical"),
+metric = c("euclidean"), angle = 0, angle.tol = 180,
+nlag = 20, maxdist = 0.5, xlag = NA, lag.tol = 0.5, grid = TRUE))
+
+plot(varioGram(model_2_t2, type = "default", spatial = "trend",
+formula = ~NULL, composite = TRUE, model = c("empirical"),
+metric = c("euclidean"), angle = 0, angle.tol = 180,
+nlag = 20, maxdist = 0.5, xlag = NA, lag.tol = 0.5, grid = TRUE))
+
+plot(varioGram(model_3_t2, type = "default", spatial = "trend",
+formula = ~NULL, composite = TRUE, model = c("empirical"),
+metric = c("euclidean"), angle = 0, angle.tol = 180,
+nlag = 20, maxdist = 0.5, xlag = NA, lag.tol = 0.5, grid = TRUE))
+
+plot(varioGram(model_4_t2, type = "default", spatial = "trend",
+formula = ~NULL, composite = TRUE, model = c("empirical"),
+metric = c("euclidean"), angle = 0, angle.tol = 180,
+nlag = 20, maxdist = 0.5, xlag = NA, lag.tol = 0.5, grid = TRUE))
+
+plot(varioGram(model_5_t2, type = "default", spatial = "trend",
+formula = ~NULL, composite = TRUE, model = c("empirical"),
+metric = c("euclidean"), angle = 0, angle.tol = 180,
+nlag = 20, maxdist = 0.5, xlag = NA, lag.tol = 0.5, grid = TRUE))
+
+```
+
+### AIC {#sec-AIC2}
+
+```{r}
+#| output: false
+#| warning: false
+
+#AIC comparison
+
+modsel_t2 = icREML(list(model_1_t2, model_2_t2, model_3_t2, model_4_t2, model_5_t2)); modsel_t2
+modsel_t2 <- as.data.frame(modsel_t2)
+
+```
+
+::: panel-tabset
+### Model 1
+
+```{r}
+icREML(list(model_1_t2))
+```
+
+### Model 2
+
+```{r}
+icREML(list(model_2_t2))
+```
+
+### Model 3
+
+```{r}
+icREML(list(model_3_t2))
+```
+
+### Model 4
+
+```{r}
+icREML(list(model_4_t2))
+```
+
+### Model 5
+
+```{r}
+icREML(list(model_5_t2))
+```
+:::
+
+### Spatial Distribution of Residuals
+
+```{r}
+#| label: fig-resplot-t2
+#| fig-cap: "Spatial Distribution of residuals (Trial 2)"
+resid_long <- t2 %>%
+  mutate(
+    row_number = as.numeric(as.character(row_number)),
+    col_number = as.numeric(as.character(col_number)),
+    Model_1 = residuals(model_1_t2, type = "response"),
+    Model_2 = residuals(model_2_t2, type = "response"),
+    Model_3 = residuals(model_3_t2, type = "response"),
+    Model_4 = residuals(model_4_t2, type = "response"),
+    Model_5 = residuals(model_5_t2, type = "response"))  |> 
+  pivot_longer(
+    cols = starts_with("Model_"),
+    names_to = "Model",
+    values_to = "Residual")
+
+lim <- max(abs(resid_long$Residual), na.rm = TRUE)
+
+ggplot(
+  resid_long,
+  aes(
+    x = col_number,
+    y = row_number,
+    fill = Residual
+  )
+) +
+  geom_tile(color = "white", linewidth = 0.2) +
+  scale_fill_gradient2(
+  low = "#2166AC",
+  mid = "#F7F7F7",
+  high = "#B35806",
+  midpoint = 0,
+  limits = c(-lim, lim)) +
+  coord_fixed() +
+  scale_y_reverse() +
+  facet_wrap(~Model) +
+  theme_minimal() +
+  labs(
+    title = "Spatial distribution of residuals",
+    x = "Column",
+    y = "Row"
+  )
+```
+
+### Best Model and Ranking
+
+```{r}
+#| label: t2-blups
+#| results: hide
+
+#BLUPs
+blup1_t2 <- predict.asreml(model_1_t2, classify = "geno.cod", sed = TRUE)
+blup2_t2 <- predict.asreml(model_2_t2, classify = "geno.cod", sed = TRUE)
+blup3_t2 <- predict.asreml(model_3_t2, classify = "geno.cod", sed = TRUE)
+blup4_t2 <- predict.asreml(model_4_t2, classify = "geno.cod", sed = TRUE)
+blup5_t2 <- predict.asreml(model_5_t2, classify = "geno.cod", sed = TRUE)
+
+blup_t2 <- list(blup1_t2, blup2_t2, blup3_t2, blup4_t2, blup5_t2)
+predic_value_t2 <- list()
+
+for (i in 1:length(blup_t2)) {
+  
+  predic_value_t2[[i]] <- blup_t2[[i]]$pvals |> 
+    dplyr::select(predicted.value, dplyr::everything()) |> 
+    dplyr::arrange(desc(predicted.value))
+
+}
+
+#blues - average of all checks together
+blues_checks1_t2 <- predict(model_1_t2, classify = "check.cod")$pvals
+blues_checks2_t2 <- predict(model_2_t2, classify = "check.cod")$pvals
+blues_checks3_t2 <- predict(model_3_t2, classify = "check.cod")$pvals
+blues_checks4_t2 <- predict(model_4_t2, classify = "check.cod")$pvals
+blues_checks5_t2 <- predict(model_5_t2, classify = "check.cod")$pvals
+
+blue_t2 <- list(blues_checks1_t2, blues_checks2_t2, blues_checks3_t2, blues_checks4_t2, blues_checks5_t2)
+bpredic_value_t2 <- list()
+
+for (i in 1:length(blue_t2)) {
+  
+  bpredic_value_t2[[i]] <- blue_t2[[i]] |> 
+        dplyr::filter(check.cod != "Candidato") |>
+    dplyr::select(predicted.value, dplyr::everything()) |> 
+    dplyr::arrange(desc(predicted.value))  
+}
+
+```
+
+```{r}
+#| label: fig-h2-t2
+#| fig-cap: "BLUPs ranking correlation (Trial 2)"
+
+# Selecting baseline model and best model
+t2_comp <- blup_comparison(blup1_t2$pvals, blup2_t2$pvals, m1_name = "Model 1", m2_name = "Best Model")
+t2_comp$ranking_plot
+```
+
+### Broad-sense Heritability
+
+```{r}
+#| label: tbl-heritability-t2
+#| tbl-cap: Broad-sense Heritability (Cullis, 2006) of the different models to spatial correction
+
+# Heritabilities - Generalized heritability
+h2_mod1_t2 <- 1-(mean(blup1_t2$sed[upper.tri(blup1_t2$sed)]^2)/(2*varcomp_m1_t2[6,1]))
+h2_mod2_t2 <- 1-(mean(blup2_t2$sed[upper.tri(blup2_t2$sed)]^2)/(2*varcomp_m2_t2[3,1]))
+h2_mod3_t2 <- 1-(mean(blup3_t2$sed[upper.tri(blup3_t2$sed)]^2)/(2*varcomp_m3_t2[6,1]))
+h2_mod4_t2 <- 1-(mean(blup4_t2$sed[upper.tri(blup4_t2$sed)]^2)/(2*varcomp_m4_t2[6,1]))
+h2_mod5_t2 <- 1-(mean(blup5_t2$sed[upper.tri(blup5_t2$sed)]^2)/(2*varcomp_m5_t2[6,1]))
+
+h2_t2 <- data.frame(
+  Model = c("Model 1", "Model 2", "Model 3", "Model 4", "Model 5"),
+  H2 = c(h2_mod1_t2, h2_mod2_t2, h2_mod3_t2, h2_mod4_t2, h2_mod5_t2)
+)
+
+options(knitr.table.format = "html")
+
+h2_t2 |> 
+  kbl(caption = " ", digits = 2) |> 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE) 
+```
+
+# Rwebitaba Season 2022/1 (Trial 3 - OT1RWE22)
+
+```{r}
+#| label: fig-t3-prod
+
+t3 <- data |> filter (env == "OT1RWE21")
+
+# Modifying the geno.cod and check.cod columns
+t3 <- t3 |> 
+  mutate(
+    check.cod = ifelse(is.na(check.cod), "Candidato", as.character(check.cod)),
+    geno.cod  = ifelse(is.na(geno.cod), "Testemunha", as.character(geno.cod))
+  ) |> 
+  mutate(
+    check.cod = as.factor(check.cod),
+    geno.cod  = as.factor(geno.cod),
+    rowgroup  = as.factor(rowgroup),
+    colgroup  = as.factor(colgroup),
+    rn        = as.factor(rn),
+    cn        = as.factor(cn))
+
+# Identifying checks with no valid observations
+# t3 |> 
+#   group_by(check.cod) |>
+#   summarise(n_total = n(),
+#             n_na = sum(is.na(rytha)),
+#             n_obs = sum(!is.na(rytha))) |>
+#   arrange(n_obs)
+
+t3 <- t3 |> mutate(
+  check.cod = as.character(check.cod),
+  check.cod = ifelse(check.cod == "RAK808", "Candidato", check.cod),
+  check.cod = as.factor(check.cod))
+
+#unique(t3$row_number)
+#unique(t3$col_number)
+#unique(t3$rowgroup)
+#unique(t3$colgroup)
+#unique(t3$check.cod)
+#length(unique(t3$geno.cod))
+#unique(t3$rc.group)
+
+```
+
+```{r}
+#| label: models-t3
+#| output: false
+
+# Model 1 - Piepho & Williams (2016) model as a starter
+model_1_t3 <- asreml(fixed = rytha ~ check.cod,
+             random = ~ rowgroup + colgroup + rowgroup:colgroup + rowgroup:rn + colgroup:cn + geno.cod,
+             residual = ~idv(units),
+             na.action = na.method("include"),
+             data = t3, maxinter=50)
+
+# Model 2 - Row and column groups as fixed
+model_2_t3 <-  asreml(fixed = rytha ~ rowgroup + colgroup + rowgroup:colgroup + check.cod,
+             random = ~ rowgroup:rn + colgroup:cn + geno.cod,
+             residual = ~ idv(units),
+             na.action = na.method("include"),
+             data = t3, maxint=50)
+
+# Model 3 - AR1 in residuals
+model_3_t3 <-  asreml(fixed = rytha ~ check.cod,
+             random = ~ rowgroup + colgroup + rowgroup:colgroup + rowgroup:rn + colgroup:cn + geno.cod,
+             residual = ~ ar1v(row_number):ar1(col_number),
+             na.action = na.method("include"),
+             data = t3, maxint=50)
+
+# Model 4 - AR1 in residuals + nugget effect
+model_4_t3 <-  asreml(fixed = rytha ~ check.cod,
+             random = ~ rowgroup + colgroup + rowgroup:colgroup + rowgroup:rn + colgroup:cn + geno.cod + units,
+             residual = ~ ar1v(row_number):ar1(col_number),
+             na.action = na.method("include"),
+             data = t3, maxint=50)
+
+# Model 5 - AR1 in residuals + nugget effect + row/column as covariables
+model_5_t3 <-  asreml(fixed = rytha ~ check.cod +  lin(row_number) + lin(col_number),
+             random = ~ rowgroup + colgroup + rowgroup:colgroup + rowgroup:rn + colgroup:cn + geno.cod + units,
+             residual = ~ ar1v(row_number):ar1(col_number),
+             na.action = na.method("include"),
+             data = t3, maxint=50)
+
+```
+
+### Variance components {#sec-VC3}
+
+::: panel-tabset
+### Model 1
+
+```{r}
+varcomp_m1_t3 <- summary(model_1_t3)$varcomp
+varcomp_m1_t3 |> 
+  kbl(caption = "Variance components for Model 1.", digits = 4) |> 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+
+```
+
+### Model 2
+
+```{r}
+varcomp_m2_t3 <- summary(model_2_t3)$varcomp
+varcomp_m2_t3 |> 
+  kbl(caption = "Variance components for Model 2.", digits = 4) |> 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+```
+
+### Model 3
+
+```{r}
+varcomp_m3_t3 <- summary(model_3_t3)$varcomp
+varcomp_m3_t3 |> 
+  kbl(caption = "Variance components for Model 3.", digits = 4) |> 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+```
+
+### Model 4
+
+```{r}
+varcomp_m4_t3 <- summary(model_4_t3)$varcomp
+varcomp_m4_t3 |> 
+  kbl(caption = "Variance components for Model 4.", digits = 4) |> 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+```
+
+### Model 5
+
+```{r}
+varcomp_m5_t3 <- summary(model_5_t3)$varcomp
+varcomp_m5_t3 |> 
+  kbl(caption = "Variance components for Model 5.", digits = 4) |> 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+
+```
+:::
+
+### Wald test
+
+::: panel-tabset
+### Model 1
+
+```{r}
+#| warning: false
+
+#Fixed effects
+wald.asreml(model_1_t3)
+```
+
+### Model 2
+
+```{r}
+wald.asreml(model_2_t3)
+```
+
+### Model 3
+
+```{r}
+wald.asreml(model_3_t3)
+```
+
+### Model 4
+
+```{r}
+wald.asreml(model_4_t3)
+```
+
+### Model 5
+
+```{r}
+wald.asreml(model_5_t3)
+```
+:::
+
+### LRT
+
+```{r}
+#| output: false
+
+#Random effects
+red_model1_t3 <- asreml(fixed = rytha ~ check.cod,
+             random = ~ rowgroup + colgroup + rowgroup:colgroup + rowgroup:rn + colgroup:cn,
+             residual = ~idv(units),
+             na.action = na.method("include"),
+             data = t3, maxinter=50)
+
+red_model2_t3 <-  asreml(fixed = rytha ~ rowgroup + colgroup + rowgroup:colgroup + check.cod,
+             random = ~ rowgroup:rn + colgroup:cn,
+             residual = ~ idv(units),
+             na.action = na.method("include"),
+             data = t3, maxint=50)
+
+red_model3_t3 <-  asreml(fixed = rytha ~ check.cod,
+             random = ~ rowgroup + colgroup + rowgroup:colgroup + rowgroup:rn + colgroup:cn,
+             residual = ~ ar1v(row_number):ar1(col_number),
+             na.action = na.method("include"),
+             data = t3, maxint=50)
+
+red_model4_t3 <-  asreml(fixed = rytha ~ check.cod,
+             random = ~ rowgroup + colgroup + rowgroup:colgroup + rowgroup:rn + colgroup:cn + units,
+             residual = ~ ar1v(row_number):ar1(col_number),
+             na.action = na.method("include"),
+             data = t3, maxint=50)
+
+red_model5_t3 <-  asreml(fixed = rytha ~ check.cod +  lin(row_number) + lin(col_number),
+             random = ~ rowgroup + colgroup + rowgroup:colgroup + rowgroup:rn + colgroup:cn + units,
+             residual = ~ ar1v(row_number):ar1(col_number),
+             na.action = na.method("include"),
+             data = t3, maxint=50)
+```
+
+::: panel-tabset
+### Model 1
+
+```{r}
+lrt(model_1_t3, red_model1_t3)
+
+```
+
+### Model 2
+
+```{r}
+lrt(model_2_t3, red_model2_t3)
+
+```
+
+### Model 3
+
+```{r}
+lrt(model_3_t3, red_model3_t3)
+```
+
+### Model 4
+
+```{r}
+lrt(model_4_t3, red_model4_t3)
+
+```
+
+### Model 5
+
+```{r}
+lrt(model_5_t3, red_model5_t3)
+
+```
+:::
+
+### Semivariograms
+
+```{r}
+#| label: fig-variograms-t3
+#| warning: false
+#| fig-cap: 
+#|   - "Semivariogram for Model 1 (Baseline Model)"
+#|   - "Semivariogram for Model 2 (Row and column groups as fixed)"
+#|   - "Semivariogram for Model 3 (AR1 in residuals)"
+#|   - "Semivariogram for Model 4 (AR1 in residuals + nugget effect)"
+#|   - "Semivariogram for Model 5 (AR1 in residuals + nugget effect + linear trend)"
+
+plot(varioGram(model_1_t3, type = "default", spatial = "trend",
+formula = ~NULL, composite = TRUE, model = c("empirical"),
+metric = c("euclidean"), angle = 0, angle.tol = 180,
+nlag = 20, maxdist = 0.5, xlag = NA, lag.tol = 0.5, grid = TRUE))
+
+plot(varioGram(model_2_t3, type = "default", spatial = "trend",
+formula = ~NULL, composite = TRUE, model = c("empirical"),
+metric = c("euclidean"), angle = 0, angle.tol = 180,
+nlag = 20, maxdist = 0.5, xlag = NA, lag.tol = 0.5, grid = TRUE))
+
+plot(varioGram(model_3_t3, type = "default", spatial = "trend",
+formula = ~NULL, composite = TRUE, model = c("empirical"),
+metric = c("euclidean"), angle = 0, angle.tol = 180,
+nlag = 20, maxdist = 0.5, xlag = NA, lag.tol = 0.5, grid = TRUE))
+
+plot(varioGram(model_4_t3, type = "default", spatial = "trend",
+formula = ~NULL, composite = TRUE, model = c("empirical"),
+metric = c("euclidean"), angle = 0, angle.tol = 180,
+nlag = 20, maxdist = 0.5, xlag = NA, lag.tol = 0.5, grid = TRUE))
+
+plot(varioGram(model_5_t3, type = "default", spatial = "trend",
+formula = ~NULL, composite = TRUE, model = c("empirical"),
+metric = c("euclidean"), angle = 0, angle.tol = 180,
+nlag = 20, maxdist = 0.5, xlag = NA, lag.tol = 0.5, grid = TRUE))
+
+```
+
+### AIC {#sec-AIC3}
+
+```{r}
+#| output: false
+#| warning: false
+
+#AIC comparison
+
+modsel_t3 = icREML(list(model_1_t3, model_2_t3, model_3_t3, model_4_t3, model_5_t3)); modsel_t3
+modsel_t3 <- as.data.frame(modsel_t3)
+
+```
+
+::: panel-tabset
+### Model 1
+
+```{r}
+icREML(list(model_1_t3))
+```
+
+### Model 2
+
+```{r}
+icREML(list(model_2_t3))
+```
+
+### Model 3
+
+```{r}
+icREML(list(model_3_t3))
+```
+
+### Model 4
+
+```{r}
+icREML(list(model_4_t3))
+```
+
+### Model 5
+
+```{r}
+icREML(list(model_5_t3))
+```
+:::
+
+### Spatial Distribution of Residuals
+
+```{r}
+#| label: fig-resplot-t3
+#| fig-cap: "Spatial Distribution of residuals (Trial 3)"
+resid_long <- t3 %>%
+  mutate(
+    row_number = as.numeric(as.character(row_number)),
+    col_number = as.numeric(as.character(col_number)),
+    Model_1 = residuals(model_1_t3, type = "response"),
+    Model_2 = residuals(model_2_t3, type = "response"),
+    Model_3 = residuals(model_3_t3, type = "response"),
+    Model_4 = residuals(model_4_t3, type = "response"),
+    Model_5 = residuals(model_5_t3, type = "response"))  |> 
+  pivot_longer(
+    cols = starts_with("Model_"),
+    names_to = "Model",
+    values_to = "Residual")
+
+lim <- max(abs(resid_long$Residual), na.rm = TRUE)
+
+ggplot(
+  resid_long,
+  aes(
+    x = col_number,
+    y = row_number,
+    fill = Residual
+  )
+) +
+  geom_tile(color = "white", linewidth = 0.2) +
+  scale_fill_gradient2(
+  low = "#2166AC",
+  mid = "#F7F7F7",
+  high = "#B35806",
+  midpoint = 0,
+  limits = c(-lim, lim)) +
+  coord_fixed() +
+  scale_y_reverse() +
+  facet_wrap(~Model) +
+  theme_minimal() +
+  labs(
+    title = "Spatial distribution of residuals",
+    x = "Column",
+    y = "Row"
+  )
+```
+
+### Best Model and Ranking
+
+```{r}
+#| label: t3-blups
+#| results: hide
+
+#BLUPs
+blup1_t3 <- predict.asreml(model_1_t3, classify = "geno.cod", sed = TRUE)
+blup2_t3 <- predict.asreml(model_2_t3, classify = "geno.cod", sed = TRUE)
+blup3_t3 <- predict.asreml(model_3_t3, classify = "geno.cod", sed = TRUE)
+blup4_t3 <- predict.asreml(model_4_t3, classify = "geno.cod", sed = TRUE)
+blup5_t3 <- predict.asreml(model_5_t3, classify = "geno.cod", sed = TRUE)
+
+blup_t3 <- list(blup1_t3, blup2_t3, blup3_t3, blup4_t3, blup5_t3)
+predic_value_t3 <- list()
+
+for (i in 1:length(blup_t3)) {
+  
+  predic_value_t3[[i]] <- blup_t3[[i]]$pvals |> 
+    dplyr::select(predicted.value, dplyr::everything()) |> 
+    dplyr::arrange(desc(predicted.value))
+
+}
+
+#blues - average of all checks together
+blues_checks1_t3 <- predict(model_1_t3, classify = "check.cod")$pvals
+blues_checks2_t3 <- predict(model_2_t3, classify = "check.cod")$pvals
+blues_checks3_t3 <- predict(model_3_t3, classify = "check.cod")$pvals
+blues_checks4_t3 <- predict(model_4_t3, classify = "check.cod")$pvals
+blues_checks5_t3 <- predict(model_5_t3, classify = "check.cod")$pvals
+
+blue_t3 <- list(blues_checks1_t3, blues_checks2_t3, blues_checks3_t3, blues_checks4_t3, blues_checks5_t3)
+bpredic_value_t3 <- list()
+
+for (i in 1:length(blue_t3)) {
+  
+  bpredic_value_t3[[i]] <- blue_t3[[i]] |> 
+        dplyr::filter(check.cod != "Candidato") |>
+    dplyr::select(predicted.value, dplyr::everything()) |> 
+    dplyr::arrange(desc(predicted.value))  
+}
+
+```
+
+```{r}
+#| label: fig-h2-t3
+#| fig-cap: "BLUPs ranking correlation (Trial 3)"
+
+# Selecting baseline model and best model
+t3_comp <- blup_comparison(blup1_t3$pvals, blup4_t3$pvals, m1_name = "Model 1", m2_name = "Best Model")
+t3_comp$ranking_plot
+```
+
+### Broad-sense Heritability
+
+```{r}
+#| label: tbl-heritability-t3
+#| tbl-cap: Broad-sense Heritability (Cullis, 2006) of the different models to spatial correction
+
+# Heritabilities - Generalized heritability
+h2_mod1_t3 <- 1-(mean(blup1_t3$sed[upper.tri(blup1_t3$sed)]^2)/(2*varcomp_m1_t3[6,1]))
+h2_mod2_t3 <- 1-(mean(blup2_t3$sed[upper.tri(blup2_t3$sed)]^2)/(2*varcomp_m2_t3[3,1]))
+h2_mod3_t3 <- 1-(mean(blup3_t3$sed[upper.tri(blup3_t3$sed)]^2)/(2*varcomp_m3_t3[6,1]))
+h2_mod4_t3 <- 1-(mean(blup4_t3$sed[upper.tri(blup4_t3$sed)]^2)/(2*varcomp_m4_t3[6,1]))
+h2_mod5_t3 <- 1-(mean(blup5_t3$sed[upper.tri(blup5_t3$sed)]^2)/(2*varcomp_m5_t3[6,1]))
+
+h2_t3 <- data.frame(
+  Model = c("Model 1", "Model 2", "Model 3", "Model 4", "Model 5"),
+  H2 = c(h2_mod1_t3, h2_mod2_t3, h2_mod3_t3, h2_mod4_t3, h2_mod5_t3)
+)
+
+options(knitr.table.format = "html")
+
+h2_t3 |> 
+  kbl(caption = " ", digits = 2) |> 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE) 
+```
+
+# Serere Season 2022/1 (Trial 4 - OT1SER22)
+
+```{r}
+#| label: fig-t4-prod
+
+t4 <- data |> filter (env == "OT1SER22")
+
+# Modifying the geno.cod and check.cod columns
+t4 <- t4 |> 
+  mutate(
+    check.cod = ifelse(is.na(check.cod), "Candidato", as.character(check.cod)),
+    geno.cod  = ifelse(is.na(geno.cod), "Testemunha", as.character(geno.cod))
+  ) |> 
+  mutate(
+    check.cod = as.factor(check.cod),
+    geno.cod  = as.factor(geno.cod),
+    rowgroup  = as.factor(rowgroup),
+    colgroup  = as.factor(colgroup),
+    rn        = as.factor(rn),
+    cn        = as.factor(cn))
+
+# Identifying checks with no valid observations
+# t4 |> 
+#   group_by(check.cod) |>
+#   summarise(n_total = n(),
+#             n_na = sum(is.na(rytha)),
+#             n_obs = sum(!is.na(rytha))) |>
+#   arrange(n_obs)
+
+t4 <- t4 |> mutate(
+  check.cod = as.character(check.cod),
+  check.cod = ifelse(check.cod == "RAK808", "Candidato", check.cod),
+  check.cod = as.factor(check.cod))
+```
+
+```{r}
+#| label: models-t4
+#| output: false
+
+# Model 1 - Piepho & Williams (2016) model as a starter
+model_1_t4 <- asreml(fixed = rytha ~ check.cod,
+             random = ~ rowgroup + colgroup + rowgroup:colgroup + rowgroup:rn + colgroup:cn + geno.cod,
+             residual = ~idv(units),
+             na.action = na.method("include"),
+             data = t4, maxinter=50)
+
+# Model 2 - Row and column groups as fixed
+model_2_t4 <-  asreml(fixed = rytha ~ rowgroup + colgroup + rowgroup:colgroup + check.cod,
+             random = ~ rowgroup:rn + colgroup:cn + geno.cod,
+             residual = ~ idv(units),
+             na.action = na.method("include"),
+             data = t4, maxint=50)
+
+# Model 3 - AR1 in residuals
+model_3_t4 <-  asreml(fixed = rytha ~ check.cod,
+             random = ~ rowgroup + colgroup + rowgroup:colgroup + rowgroup:rn + colgroup:cn + geno.cod,
+             residual = ~ ar1v(row_number):ar1(col_number),
+             na.action = na.method("include"),
+             data = t4, maxint=50)
+
+# Model 4 - AR1 in residuals + nugget effect
+model_4_t4 <-  asreml(fixed = rytha ~ check.cod,
+             random = ~ rowgroup + colgroup + rowgroup:colgroup + rowgroup:rn + colgroup:cn + geno.cod + units,
+             residual = ~ ar1v(row_number):ar1(col_number),
+             na.action = na.method("include"),
+             data = t4, maxint=50)
+
+# Model 5 - AR1 in residuals + nugget effect + row/column as covariables
+model_5_t4 <-  asreml(fixed = rytha ~ check.cod +  lin(row_number) + lin(col_number),
+             random = ~ rowgroup + colgroup + rowgroup:colgroup + rowgroup:rn + colgroup:cn + geno.cod + units,
+             residual = ~ ar1v(row_number):ar1(col_number),
+             na.action = na.method("include"),
+             data = t4, maxint=50)
+
+```
+
+### Variance components {#sec-VC4}
+
+::: panel-tabset
+### Model 1
+
+```{r}
+varcomp_m1_t4 <- summary(model_1_t4)$varcomp
+varcomp_m1_t4 |> 
+  kbl(caption = "Variance components for Model 1.", digits = 4) |> 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+
+```
+
+### Model 2
+
+```{r}
+varcomp_m2_t4 <- summary(model_2_t4)$varcomp
+varcomp_m2_t4 |> 
+  kbl(caption = "Variance components for Model 2.", digits = 4) |> 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+```
+
+### Model 3
+
+```{r}
+varcomp_m3_t4 <- summary(model_3_t4)$varcomp
+varcomp_m3_t4 |> 
+  kbl(caption = "Variance components for Model 3.", digits = 4) |> 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+```
+
+### Model 4
+
+```{r}
+varcomp_m4_t4 <- summary(model_4_t4)$varcomp
+varcomp_m4_t4 |> 
+  kbl(caption = "Variance components for Model 4.", digits = 4) |> 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+```
+
+### Model 5
+
+```{r}
+varcomp_m5_t4 <- summary(model_5_t4)$varcomp
+varcomp_m5_t4 |> 
+  kbl(caption = "Variance components for Model 5.", digits = 4) |> 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+
+```
+:::
+
+### Wald test
+
+::: panel-tabset
+### Model 1
+
+```{r}
+#| warning: false
+
+#Fixed effects
+wald.asreml(model_1_t4)
+```
+
+### Model 2
+
+```{r}
+wald.asreml(model_2_t4)
+```
+
+### Model 3
+
+```{r}
+wald.asreml(model_3_t4)
+```
+
+### Model 4
+
+```{r}
+wald.asreml(model_4_t4)
+```
+
+### Model 5
+
+```{r}
+wald.asreml(model_5_t4)
+```
+:::
+
+### LRT
+
+```{r}
+#| output: false
+
+#Random effects
+red_model1_t4 <- asreml(fixed = rytha ~ check.cod,
+             random = ~ rowgroup + colgroup + rowgroup:colgroup + rowgroup:rn + colgroup:cn,
+             residual = ~idv(units),
+             na.action = na.method("include"),
+             data = t4, maxinter=50)
+
+red_model2_t4 <-  asreml(fixed = rytha ~ rowgroup + colgroup + rowgroup:colgroup + check.cod,
+             random = ~ rowgroup:rn + colgroup:cn,
+             residual = ~ idv(units),
+             na.action = na.method("include"),
+             data = t4, maxint=50)
+
+red_model3_t4 <-  asreml(fixed = rytha ~ check.cod,
+             random = ~ rowgroup + colgroup + rowgroup:colgroup + rowgroup:rn + colgroup:cn,
+             residual = ~ ar1v(row_number):ar1(col_number),
+             na.action = na.method("include"),
+             data = t4, maxint=50)
+
+red_model4_t4 <-  asreml(fixed = rytha ~ check.cod,
+             random = ~ rowgroup + colgroup + rowgroup:colgroup + rowgroup:rn + colgroup:cn + units,
+             residual = ~ ar1v(row_number):ar1(col_number),
+             na.action = na.method("include"),
+             data = t4, maxint=50)
+
+red_model5_t4 <-  asreml(fixed = rytha ~ check.cod +  lin(row_number) + lin(col_number),
+             random = ~ rowgroup + colgroup + rowgroup:colgroup + rowgroup:rn + colgroup:cn + units,
+             residual = ~ ar1v(row_number):ar1(col_number),
+             na.action = na.method("include"),
+             data = t4, maxint=50)
+```
+
+::: panel-tabset
+### Model 1
+
+```{r}
+lrt(model_1_t4, red_model1_t4)
+
+```
+
+### Model 2
+
+```{r}
+lrt(model_2_t4, red_model2_t4)
+
+```
+
+### Model 3
+
+```{r}
+lrt(model_3_t4, red_model3_t4)
+```
+
+### Model 4
+
+```{r}
+lrt(model_4_t4, red_model4_t4)
+
+```
+
+### Model 5
+
+```{r}
+lrt(model_5_t4, red_model5_t4)
+
+```
+:::
+
+### Semivariograms
+
+```{r}
+#| label: fig-variograms-t4
+#| warning: false
+#| fig-cap: 
+#|   - "Semivariogram for Model 1 (Baseline Model)"
+#|   - "Semivariogram for Model 2 (Row and column groups as fixed)"
+#|   - "Semivariogram for Model 3 (AR1 in residuals)"
+#|   - "Semivariogram for Model 4 (AR1 in residuals + nugget effect)"
+#|   - "Semivariogram for Model 5 (AR1 in residuals + nugget effect + linear trend)"
+
+plot(varioGram(model_1_t4, type = "default", spatial = "trend",
+formula = ~NULL, composite = TRUE, model = c("empirical"),
+metric = c("euclidean"), angle = 0, angle.tol = 180,
+nlag = 20, maxdist = 0.5, xlag = NA, lag.tol = 0.5, grid = TRUE))
+
+plot(varioGram(model_2_t4, type = "default", spatial = "trend",
+formula = ~NULL, composite = TRUE, model = c("empirical"),
+metric = c("euclidean"), angle = 0, angle.tol = 180,
+nlag = 20, maxdist = 0.5, xlag = NA, lag.tol = 0.5, grid = TRUE))
+
+plot(varioGram(model_3_t4, type = "default", spatial = "trend",
+formula = ~NULL, composite = TRUE, model = c("empirical"),
+metric = c("euclidean"), angle = 0, angle.tol = 180,
+nlag = 20, maxdist = 0.5, xlag = NA, lag.tol = 0.5, grid = TRUE))
+
+plot(varioGram(model_4_t4, type = "default", spatial = "trend",
+formula = ~NULL, composite = TRUE, model = c("empirical"),
+metric = c("euclidean"), angle = 0, angle.tol = 180,
+nlag = 20, maxdist = 0.5, xlag = NA, lag.tol = 0.5, grid = TRUE))
+
+plot(varioGram(model_5_t4, type = "default", spatial = "trend",
+formula = ~NULL, composite = TRUE, model = c("empirical"),
+metric = c("euclidean"), angle = 0, angle.tol = 180,
+nlag = 20, maxdist = 0.5, xlag = NA, lag.tol = 0.5, grid = TRUE))
+
+```
+
+### AIC {#sec-AIC4}
+
+```{r}
+#| output: false
+#| warning: false
+
+#AIC comparison
+
+modsel_t4 = icREML(list(model_1_t4, model_2_t4, model_3_t4, model_4_t4, model_5_t4)); modsel_t4
+modsel_t4 <- as.data.frame(modsel_t4)
+
+```
+
+::: panel-tabset
+### Model 1
+
+```{r}
+icREML(list(model_1_t4))
+```
+
+### Model 2
+
+```{r}
+icREML(list(model_2_t4))
+```
+
+### Model 3
+
+```{r}
+icREML(list(model_3_t4))
+```
+
+### Model 4
+
+```{r}
+icREML(list(model_4_t4))
+```
+
+### Model 5
+
+```{r}
+icREML(list(model_5_t4))
+```
+:::
+
+### Spatial Distribution of Residuals
+
+```{r}
+#| label: fig-resplot-t4
+#| fig-cap: "Spatial Distribution of residuals (Trial 4)"
+resid_long <- t4 %>%
+  mutate(
+    row_number = as.numeric(as.character(row_number)),
+    col_number = as.numeric(as.character(col_number)),
+    Model_1 = residuals(model_1_t4, type = "response"),
+    Model_2 = residuals(model_2_t4, type = "response"),
+    Model_3 = residuals(model_3_t4, type = "response"),
+    Model_4 = residuals(model_4_t4, type = "response"),
+    Model_5 = residuals(model_5_t4, type = "response"))  |> 
+  pivot_longer(
+    cols = starts_with("Model_"),
+    names_to = "Model",
+    values_to = "Residual")
+
+lim <- max(abs(resid_long$Residual), na.rm = TRUE)
+
+ggplot(
+  resid_long,
+  aes(
+    x = col_number,
+    y = row_number,
+    fill = Residual
+  )
+) +
+  geom_tile(color = "white", linewidth = 0.2) +
+  scale_fill_gradient2(
+  low = "#2166AC",
+  mid = "#F7F7F7",
+  high = "#B35806",
+  midpoint = 0,
+  limits = c(-lim, lim)) +
+  coord_fixed() +
+  scale_y_reverse() +
+  facet_wrap(~Model) +
+  theme_minimal() +
+  labs(
+    title = "Spatial distribution of residuals",
+    x = "Column",
+    y = "Row"
+  )
+```
+
+### Best Model and Ranking
+
+```{r}
+#| label: t4-blups
+#| results: hide
+
+#BLUPs
+blup1_t4 <- predict.asreml(model_1_t4, classify = "geno.cod", sed = TRUE)
+blup2_t4 <- predict.asreml(model_2_t4, classify = "geno.cod", sed = TRUE)
+blup3_t4 <- predict.asreml(model_3_t4, classify = "geno.cod", sed = TRUE)
+blup4_t4 <- predict.asreml(model_4_t4, classify = "geno.cod", sed = TRUE)
+blup5_t4 <- predict.asreml(model_5_t4, classify = "geno.cod", sed = TRUE)
+
+blup_t4 <- list(blup1_t4, blup2_t4, blup3_t4, blup4_t4, blup5_t4)
+predic_value_t4 <- list()
+
+for (i in 1:length(blup_t4)) {
+  
+  predic_value_t4[[i]] <- blup_t4[[i]]$pvals |> 
+    dplyr::select(predicted.value, dplyr::everything()) |> 
+    dplyr::arrange(desc(predicted.value))
+
+}
+
+#blues - average of all checks together
+blues_checks1_t4 <- predict(model_1_t4, classify = "check.cod")$pvals
+blues_checks2_t4 <- predict(model_2_t4, classify = "check.cod")$pvals
+blues_checks3_t4 <- predict(model_3_t4, classify = "check.cod")$pvals
+blues_checks4_t4 <- predict(model_4_t4, classify = "check.cod")$pvals
+blues_checks5_t4 <- predict(model_5_t4, classify = "check.cod")$pvals
+
+blue_t4 <- list(blues_checks1_t4, blues_checks2_t4, blues_checks3_t4, blues_checks4_t4, blues_checks5_t4)
+bpredic_value_t4 <- list()
+
+for (i in 1:length(blue_t4)) {
+  
+  bpredic_value_t4[[i]] <- blue_t4[[i]] |> 
+        dplyr::filter(check.cod != "Candidato") |>
+    dplyr::select(predicted.value, dplyr::everything()) |> 
+    dplyr::arrange(desc(predicted.value))  
+}
+
+```
+
+```{r}
+#| label: fig-h2-t4
+#| fig-cap: "BLUPs ranking correlation (Trial 4)"
+
+# Selecting baseline model and best model
+t4_comp <- blup_comparison(blup1_t4$pvals, blup4_t4$pvals, m1_name = "Model 1", m2_name = "Best Model")
+t4_comp$ranking_plot
+```
+
+### Broad-sense Heritability
+
+```{r}
+#| label: tbl-heritability-t4
+#| tbl-cap: Broad-sense Heritability (Cullis, 2006) of the different models to spatial correction
+
+# Heritabilities - Generalized heritability
+h2_mod1_t4 <- 1-(mean(blup1_t4$sed[upper.tri(blup1_t4$sed)]^2)/(2*varcomp_m1_t4[6,1]))
+h2_mod2_t4 <- 1-(mean(blup2_t4$sed[upper.tri(blup2_t4$sed)]^2)/(2*varcomp_m2_t4[3,1]))
+h2_mod3_t4 <- 1-(mean(blup3_t4$sed[upper.tri(blup3_t4$sed)]^2)/(2*varcomp_m3_t4[6,1]))
+h2_mod4_t4 <- 1-(mean(blup4_t4$sed[upper.tri(blup4_t4$sed)]^2)/(2*varcomp_m4_t4[6,1]))
+h2_mod5_t4 <- 1-(mean(blup5_t4$sed[upper.tri(blup5_t4$sed)]^2)/(2*varcomp_m5_t4[6,1]))
+
+h2_t4 <- data.frame(
+  Model = c("Model 1", "Model 2", "Model 3", "Model 4", "Model 5"),
+  H2 = c(h2_mod1_t4, h2_mod2_t4, h2_mod3_t4, h2_mod4_t4, h2_mod5_t4)
+)
+
+options(knitr.table.format = "html")
+
+h2_t4 |> 
+  kbl(caption = " ", digits = 2) |> 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE) 
+```
+
+# Namulonge Season 2021/2 (Trial 5 - OT2NAM21)
+
+```{r}
+#| label: fig-t5-prod
+
+t5 <- data |> filter (env == "OT2NAM21")
+
+# Modifying the geno.cod and check.cod columns
+t5 <- t5 |> 
+  mutate(
+    check.cod = ifelse(is.na(check.cod), "Candidato", as.character(check.cod)),
+    geno.cod  = ifelse(is.na(geno.cod), "Testemunha", as.character(geno.cod))
+  ) |> 
+  mutate(
+    check.cod = as.factor(check.cod),
+    geno.cod  = as.factor(geno.cod),
+    rowgroup  = as.factor(rowgroup),
+    colgroup  = as.factor(colgroup),
+    rn        = as.factor(rn),
+    cn        = as.factor(cn))
+
+# Identifying checks with no valid observations
+# t5 |> 
+#   group_by(check.cod) |>
+#   summarise(n_total = n(),
+#             n_na = sum(is.na(rytha)),
+#            n_obs = sum(!is.na(rytha))) |>
+#  arrange(n_obs)
+```
+
+```{r}
+#| label: models-t5
+#| output: false
+
+# Model 1 - Piepho & Williams (2016) model as a starter
+model_1_t5 <- asreml(fixed = rytha ~ check.cod,
+             random = ~ rowgroup + colgroup + rowgroup:colgroup + rowgroup:rn + colgroup:cn + geno.cod,
+             residual = ~idv(units),
+             na.action = na.method("include"),
+             data = t5, maxinter=50)
+
+# Model 2 - Row and column groups as fixed
+model_2_t5 <-  asreml(fixed = rytha ~ rowgroup + colgroup + rowgroup:colgroup + check.cod,
+             random = ~ rowgroup:rn + colgroup:cn + geno.cod,
+             residual = ~ idv(units),
+             na.action = na.method("include"),
+             data = t5, maxint=50)
+
+# Model 3 - AR1 in residuals
+model_3_t5 <-  asreml(fixed = rytha ~ check.cod,
+             random = ~ rowgroup + colgroup + rowgroup:colgroup + rowgroup:rn + colgroup:cn + geno.cod,
+             residual = ~ ar1v(row_number):ar1(col_number),
+             na.action = na.method("include"),
+             data = t5, maxint=50)
+
+# Model 4 - AR1 in residuals + nugget effect
+model_4_t5 <-  asreml(fixed = rytha ~ check.cod,
+             random = ~ rowgroup + colgroup + rowgroup:colgroup + rowgroup:rn + colgroup:cn + geno.cod + units,
+             residual = ~ ar1v(row_number):ar1(col_number),
+             na.action = na.method("include"),
+             data = t5, maxint=50)
+
+# Model 5 - AR1 in residuals + nugget effect + row/column as covariables
+model_5_t5 <-  asreml(fixed = rytha ~ check.cod +  lin(row_number) + lin(col_number),
+             random = ~ rowgroup + colgroup + rowgroup:colgroup + rowgroup:rn + colgroup:cn + geno.cod + units,
+             residual = ~ ar1v(row_number):ar1(col_number),
+             na.action = na.method("include"),
+             data = t5, maxint=50)
+
+```
+
+### Variance components {#sec-VC5}
+
+::: panel-tabset
+### Model 1
+
+```{r}
+varcomp_m1_t5 <- summary(model_1_t5)$varcomp
+varcomp_m1_t5 |> 
+  kbl(caption = "Variance components for Model 1.", digits = 4) |> 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+
+```
+
+### Model 2
+
+```{r}
+varcomp_m2_t5 <- summary(model_2_t5)$varcomp
+varcomp_m2_t5 |> 
+  kbl(caption = "Variance components for Model 2.", digits = 4) |> 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+```
+
+### Model 3
+
+```{r}
+varcomp_m3_t5 <- summary(model_3_t5)$varcomp
+varcomp_m3_t5 |> 
+  kbl(caption = "Variance components for Model 3.", digits = 4) |> 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+```
+
+### Model 4
+
+```{r}
+varcomp_m4_t5 <- summary(model_4_t5)$varcomp
+varcomp_m4_t5 |> 
+  kbl(caption = "Variance components for Model 4.", digits = 4) |> 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+```
+
+### Model 5
+
+```{r}
+varcomp_m5_t5 <- summary(model_5_t5)$varcomp
+varcomp_m5_t5 |> 
+  kbl(caption = "Variance components for Model 5.", digits = 4) |> 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+
+```
+:::
+
+### Wald test
+
+::: panel-tabset
+### Model 1
+
+```{r}
+#| warning: false
+
+#Fixed effects
+wald.asreml(model_1_t5)
+```
+
+### Model 2
+
+```{r}
+wald.asreml(model_2_t5)
+```
+
+### Model 3
+
+```{r}
+wald.asreml(model_3_t5)
+```
+
+### Model 4
+
+```{r}
+wald.asreml(model_4_t5)
+```
+
+### Model 5
+
+```{r}
+wald.asreml(model_5_t5)
+```
+:::
+
+### LRT
+
+```{r}
+#| output: false
+
+#Random effects
+red_model1_t5 <- asreml(fixed = rytha ~ check.cod,
+             random = ~ rowgroup + colgroup + rowgroup:colgroup + rowgroup:rn + colgroup:cn,
+             residual = ~idv(units),
+             na.action = na.method("include"),
+             data = t5, maxinter=50)
+
+red_model2_t5 <-  asreml(fixed = rytha ~ rowgroup + colgroup + rowgroup:colgroup + check.cod,
+             random = ~ rowgroup:rn + colgroup:cn,
+             residual = ~ idv(units),
+             na.action = na.method("include"),
+             data = t5, maxint=50)
+
+red_model3_t5 <-  asreml(fixed = rytha ~ check.cod,
+             random = ~ rowgroup + colgroup + rowgroup:colgroup + rowgroup:rn + colgroup:cn,
+             residual = ~ ar1v(row_number):ar1(col_number),
+             na.action = na.method("include"),
+             data = t5, maxint=50)
+
+red_model4_t5 <-  asreml(fixed = rytha ~ check.cod,
+             random = ~ rowgroup + colgroup + rowgroup:colgroup + rowgroup:rn + colgroup:cn + units,
+             residual = ~ ar1v(row_number):ar1(col_number),
+             na.action = na.method("include"),
+             data = t5, maxint=50)
+
+red_model5_t5 <-  asreml(fixed = rytha ~ check.cod +  lin(row_number) + lin(col_number),
+             random = ~ rowgroup + colgroup + rowgroup:colgroup + rowgroup:rn + colgroup:cn + units,
+             residual = ~ ar1v(row_number):ar1(col_number),
+             na.action = na.method("include"),
+             data = t5, maxint=50)
+```
+
+::: panel-tabset
+### Model 1
+
+```{r}
+lrt(model_1_t5, red_model1_t5)
+
+```
+
+### Model 2
+
+```{r}
+lrt(model_2_t5, red_model2_t5)
+
+```
+
+### Model 3
+
+```{r}
+lrt(model_3_t5, red_model3_t5)
+```
+
+### Model 4
+
+```{r}
+lrt(model_4_t5, red_model4_t5)
+
+```
+
+### Model 5
+
+```{r}
+lrt(model_5_t5, red_model5_t5)
+
+```
+:::
+
+### Semivariograms
+
+```{r}
+#| label: fig-variograms-t5
+#| warning: false
+#| fig-cap: 
+#|   - "Semivariogram for Model 1 (Baseline Model)"
+#|   - "Semivariogram for Model 2 (Row and column groups as fixed)"
+#|   - "Semivariogram for Model 3 (AR1 in residuals)"
+#|   - "Semivariogram for Model 4 (AR1 in residuals + nugget effect)"
+#|   - "Semivariogram for Model 5 (AR1 in residuals + nugget effect + linear trend)"
+
+plot(varioGram(model_1_t5, type = "default", spatial = "trend",
+formula = ~NULL, composite = TRUE, model = c("empirical"),
+metric = c("euclidean"), angle = 0, angle.tol = 180,
+nlag = 20, maxdist = 0.5, xlag = NA, lag.tol = 0.5, grid = TRUE))
+
+plot(varioGram(model_2_t5, type = "default", spatial = "trend",
+formula = ~NULL, composite = TRUE, model = c("empirical"),
+metric = c("euclidean"), angle = 0, angle.tol = 180,
+nlag = 20, maxdist = 0.5, xlag = NA, lag.tol = 0.5, grid = TRUE))
+
+plot(varioGram(model_3_t5, type = "default", spatial = "trend",
+formula = ~NULL, composite = TRUE, model = c("empirical"),
+metric = c("euclidean"), angle = 0, angle.tol = 180,
+nlag = 20, maxdist = 0.5, xlag = NA, lag.tol = 0.5, grid = TRUE))
+
+plot(varioGram(model_4_t5, type = "default", spatial = "trend",
+formula = ~NULL, composite = TRUE, model = c("empirical"),
+metric = c("euclidean"), angle = 0, angle.tol = 180,
+nlag = 20, maxdist = 0.5, xlag = NA, lag.tol = 0.5, grid = TRUE))
+
+plot(varioGram(model_5_t5, type = "default", spatial = "trend",
+formula = ~NULL, composite = TRUE, model = c("empirical"),
+metric = c("euclidean"), angle = 0, angle.tol = 180,
+nlag = 20, maxdist = 0.5, xlag = NA, lag.tol = 0.5, grid = TRUE))
+
+```
+
+### AIC {#sec-AIC5}
+
+```{r}
+#| output: false
+#| warning: false
+
+#AIC comparison
+
+modsel_t5 = icREML(list(model_1_t5, model_2_t5, model_3_t5, model_4_t5, model_5_t5)); modsel_t5
+modsel_t5 <- as.data.frame(modsel_t5)
+
+```
+
+::: panel-tabset
+### Model 1
+
+```{r}
+icREML(list(model_1_t5))
+```
+
+### Model 2
+
+```{r}
+icREML(list(model_2_t5))
+```
+
+### Model 3
+
+```{r}
+icREML(list(model_3_t5))
+```
+
+### Model 4
+
+```{r}
+icREML(list(model_4_t5))
+```
+
+### Model 5
+
+```{r}
+icREML(list(model_5_t5))
+```
+:::
+
+### Spatial Distribution of Residuals
+
+```{r}
+#| label: fig-resplot-t5
+#| fig-cap: "Spatial Distribution of residuals (Trial 5)"
+resid_long <- t5 %>%
+  mutate(
+    row_number = as.numeric(as.character(row_number)),
+    col_number = as.numeric(as.character(col_number)),
+    Model_1 = residuals(model_1_t5, type = "response"),
+    Model_2 = residuals(model_2_t5, type = "response"),
+    Model_3 = residuals(model_3_t5, type = "response"),
+    Model_4 = residuals(model_4_t5, type = "response"),
+    Model_5 = residuals(model_5_t5, type = "response"))  |> 
+  pivot_longer(
+    cols = starts_with("Model_"),
+    names_to = "Model",
+    values_to = "Residual")
+
+lim <- max(abs(resid_long$Residual), na.rm = TRUE)
+
+ggplot(
+  resid_long,
+  aes(
+    x = col_number,
+    y = row_number,
+    fill = Residual
+  )
+) +
+  geom_tile(color = "white", linewidth = 0.2) +
+  scale_fill_gradient2(
+  low = "#2166AC",
+  mid = "#F7F7F7",
+  high = "#B35806",
+  midpoint = 0,
+  limits = c(-lim, lim)) +
+  coord_fixed() +
+  scale_y_reverse() +
+  facet_wrap(~Model) +
+  theme_minimal() +
+  labs(
+    title = "Spatial distribution of residuals",
+    x = "Column",
+    y = "Row"
+  )
+```
+
+### Best Model and Ranking
+
+```{r}
+#| label: t5-blups
+#| results: hide
+
+#BLUPs
+blup1_t5 <- predict.asreml(model_1_t5, classify = "geno.cod", sed = TRUE)
+blup2_t5 <- predict.asreml(model_2_t5, classify = "geno.cod", sed = TRUE)
+blup3_t5 <- predict.asreml(model_3_t5, classify = "geno.cod", sed = TRUE)
+blup4_t5 <- predict.asreml(model_4_t5, classify = "geno.cod", sed = TRUE)
+blup5_t5 <- predict.asreml(model_5_t5, classify = "geno.cod", sed = TRUE)
+
+blup_t5 <- list(blup1_t5, blup2_t5, blup3_t5, blup4_t5, blup5_t5)
+predic_value_t5 <- list()
+
+for (i in 1:length(blup_t5)) {
+  
+  predic_value_t5[[i]] <- blup_t5[[i]]$pvals |> 
+    dplyr::select(predicted.value, dplyr::everything()) |> 
+    dplyr::arrange(desc(predicted.value))
+
+}
+
+#blues - average of all checks together
+blues_checks1_t5 <- predict(model_1_t5, classify = "check.cod")$pvals
+blues_checks2_t5 <- predict(model_2_t5, classify = "check.cod")$pvals
+blues_checks3_t5 <- predict(model_3_t5, classify = "check.cod")$pvals
+blues_checks4_t5 <- predict(model_4_t5, classify = "check.cod")$pvals
+blues_checks5_t5 <- predict(model_5_t5, classify = "check.cod")$pvals
+
+blue_t5 <- list(blues_checks1_t5, blues_checks2_t5, blues_checks3_t5, blues_checks4_t5, blues_checks5_t5)
+bpredic_value_t5 <- list()
+
+for (i in 1:length(blue_t5)) {
+  
+  bpredic_value_t5[[i]] <- blue_t5[[i]] |> 
+        dplyr::filter(check.cod != "Candidato") |>
+    dplyr::select(predicted.value, dplyr::everything()) |> 
+    dplyr::arrange(desc(predicted.value))  
+}
+
+```
+
+```{r}
+#| label: fig-h2-t5
+#| fig-cap: "BLUPs ranking correlation (Trial 5)"
+
+# Selecting baseline model and best model
+t5_comp <- blup_comparison(blup1_t5$pvals, blup5_t5$pvals, m1_name = "Model 1", m2_name = "Best Model")
+t5_comp$ranking_plot
+```
+
+### Broad-sense Heritability
+
+```{r}
+#| label: tbl-heritability-t5
+#| tbl-cap: Broad-sense Heritability (Cullis, 2006) of the different models to spatial correction
+
+# Heritabilities - Generalized heritability
+h2_mod1_t5 <- 1-(mean(blup1_t5$sed[upper.tri(blup1_t5$sed)]^2)/(2*varcomp_m1_t5[6,1]))
+h2_mod2_t5 <- 1-(mean(blup2_t5$sed[upper.tri(blup2_t5$sed)]^2)/(2*varcomp_m2_t5[3,1]))
+h2_mod3_t5 <- 1-(mean(blup3_t5$sed[upper.tri(blup3_t5$sed)]^2)/(2*varcomp_m3_t5[6,1]))
+h2_mod4_t5 <- 1-(mean(blup4_t5$sed[upper.tri(blup4_t5$sed)]^2)/(2*varcomp_m4_t5[6,1]))
+h2_mod5_t5 <- 1-(mean(blup5_t5$sed[upper.tri(blup5_t5$sed)]^2)/(2*varcomp_m5_t5[6,1]))
+
+h2_t5 <- data.frame(
+  Model = c("Model 1", "Model 2", "Model 3", "Model 4", "Model 5"),
+  H2 = c(h2_mod1_t5, h2_mod2_t5, h2_mod3_t5, h2_mod4_t5, h2_mod5_t5)
+)
+
+options(knitr.table.format = "html")
+
+h2_t5 |> 
+  kbl(caption = " ", digits = 2) |> 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE) 
+```
+
+# Serere Season 2021/2 (Trial 6 - OT2SER21)
+
+```{r}
+#| label: fig-t6-prod
+
+t6 <- data |> filter (env == "OT2SER21")
+
+# Modifying the geno.cod and check.cod columns
+t6 <- t6 |> 
+  mutate(
+    check.cod = ifelse(is.na(check.cod), "Candidato", as.character(check.cod)),
+    geno.cod  = ifelse(is.na(geno.cod), "Testemunha", as.character(geno.cod))
+  ) |> 
+  mutate(
+    check.cod = as.factor(check.cod),
+    geno.cod  = as.factor(geno.cod),
+    rowgroup  = as.factor(rowgroup),
+    colgroup  = as.factor(colgroup),
+    rn        = as.factor(rn),
+    cn        = as.factor(cn))
+
+# Identifying checks with no valid observations
+# t6 |> 
+#   group_by(check.cod) |>
+#   summarise(n_total = n(),
+#             n_na = sum(is.na(rytha)),
+#             n_obs = sum(!is.na(rytha))) |>
+#   arrange(n_obs)
+
+t6 <- t6 |> mutate(
+  check.cod = as.character(check.cod),
+  check.cod = ifelse(check.cod %in% c("RAK808", "New_Kawogo"), "Candidato", check.cod),
+  check.cod = as.factor(check.cod))
+```
+
+```{r}
+#| label: models-t6
+#| output: false
+
+# Model 1 - Piepho & Williams (2016) model as a starter
+model_1_t6 <- asreml(fixed = rytha ~ check.cod,
+             random = ~ rowgroup + colgroup + rowgroup:colgroup + rowgroup:rn + colgroup:cn + geno.cod,
+             residual = ~idv(units),
+             na.action = na.method("include"),
+             data = t6, maxinter=50)
+
+# Model 2 - Row and column groups as fixed
+model_2_t6 <-  asreml(fixed = rytha ~ rowgroup + colgroup + rowgroup:colgroup + check.cod,
+             random = ~ rowgroup:rn + colgroup:cn + geno.cod,
+             residual = ~ idv(units),
+             na.action = na.method("include"),
+             data = t6, maxint=50)
+
+# Model 3 - AR1 in residuals
+model_3_t6 <-  asreml(fixed = rytha ~ check.cod,
+             random = ~ rowgroup + colgroup + rowgroup:colgroup + rowgroup:rn + colgroup:cn + geno.cod,
+             residual = ~ ar1v(row_number):ar1(col_number),
+             na.action = na.method("include"),
+             data = t6, maxint=50)
+
+# Model 4 - AR1 in residuals + nugget effect
+model_4_t6 <-  asreml(fixed = rytha ~ check.cod,
+             random = ~ rowgroup + colgroup + rowgroup:colgroup + rowgroup:rn + colgroup:cn + geno.cod + units,
+             residual = ~ ar1v(row_number):ar1(col_number),
+             na.action = na.method("include"),
+             data = t6, maxint=50)
+
+# Model 5 - AR1 in residuals + nugget effect + row/column as covariables
+model_5_t6 <-  asreml(fixed = rytha ~ check.cod +  lin(row_number) + lin(col_number),
+             random = ~ rowgroup + colgroup + rowgroup:colgroup + rowgroup:rn + colgroup:cn + geno.cod + units,
+             residual = ~ ar1v(row_number):ar1(col_number),
+             na.action = na.method("include"),
+             data = t6, maxint=50)
+
+```
+
+### Variance components {#sec-VC6}
+
+::: panel-tabset
+### Model 1
+
+```{r}
+varcomp_m1_t6 <- summary(model_1_t6)$varcomp
+varcomp_m1_t6 |> 
+  kbl(caption = "Variance components for Model 1.", digits = 4) |> 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+
+```
+
+### Model 2
+
+```{r}
+varcomp_m2_t6 <- summary(model_2_t6)$varcomp
+varcomp_m2_t6 |> 
+  kbl(caption = "Variance components for Model 2.", digits = 4) |> 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+```
+
+### Model 3
+
+```{r}
+varcomp_m3_t6 <- summary(model_3_t6)$varcomp
+varcomp_m3_t6 |> 
+  kbl(caption = "Variance components for Model 3.", digits = 4) |> 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+```
+
+### Model 4
+
+```{r}
+varcomp_m4_t6 <- summary(model_4_t6)$varcomp
+varcomp_m4_t6 |> 
+  kbl(caption = "Variance components for Model 4.", digits = 4) |> 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+```
+
+### Model 5
+
+```{r}
+varcomp_m5_t6 <- summary(model_5_t6)$varcomp
+varcomp_m5_t6 |> 
+  kbl(caption = "Variance components for Model 5.", digits = 4) |> 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+
+```
+:::
+
+### Wald test
+
+::: panel-tabset
+### Model 1
+
+```{r}
+#| warning: false
+
+#Fixed effects
+wald.asreml(model_1_t6)
+```
+
+### Model 2
+
+```{r}
+wald.asreml(model_2_t6)
+```
+
+### Model 3
+
+```{r}
+wald.asreml(model_3_t6)
+```
+
+### Model 4
+
+```{r}
+wald.asreml(model_4_t6)
+```
+
+### Model 5
+
+```{r}
+wald.asreml(model_5_t6)
+```
+:::
+
+### LRT
+
+```{r}
+#| output: false
+
+#Random effects
+red_model1_t6 <- asreml(fixed = rytha ~ check.cod,
+             random = ~ rowgroup + colgroup + rowgroup:colgroup + rowgroup:rn + colgroup:cn,
+             residual = ~idv(units),
+             na.action = na.method("include"),
+             data = t6, maxinter=50)
+
+red_model2_t6 <-  asreml(fixed = rytha ~ rowgroup + colgroup + rowgroup:colgroup + check.cod,
+             random = ~ rowgroup:rn + colgroup:cn,
+             residual = ~ idv(units),
+             na.action = na.method("include"),
+             data = t6, maxint=50)
+
+red_model3_t6 <-  asreml(fixed = rytha ~ check.cod,
+             random = ~ rowgroup + colgroup + rowgroup:colgroup + rowgroup:rn + colgroup:cn,
+             residual = ~ ar1v(row_number):ar1(col_number),
+             na.action = na.method("include"),
+             data = t6, maxint=50)
+
+red_model4_t6 <-  asreml(fixed = rytha ~ check.cod,
+             random = ~ rowgroup + colgroup + rowgroup:colgroup + rowgroup:rn + colgroup:cn + units,
+             residual = ~ ar1v(row_number):ar1(col_number),
+             na.action = na.method("include"),
+             data = t6, maxint=50)
+
+red_model5_t6 <-  asreml(fixed = rytha ~ check.cod +  lin(row_number) + lin(col_number),
+             random = ~ rowgroup + colgroup + rowgroup:colgroup + rowgroup:rn + colgroup:cn + units,
+             residual = ~ ar1v(row_number):ar1(col_number),
+             na.action = na.method("include"),
+             data = t6, maxint=50)
+```
+
+::: panel-tabset
+### Model 1
+
+```{r}
+lrt(model_1_t6, red_model1_t6)
+
+```
+
+### Model 2
+
+```{r}
+lrt(model_2_t6, red_model2_t6)
+
+```
+
+### Model 3
+
+```{r}
+lrt(model_3_t6, red_model3_t6)
+```
+
+### Model 4
+
+```{r}
+lrt(model_4_t6, red_model4_t6)
+
+```
+
+### Model 5
+
+```{r}
+lrt(model_5_t6, red_model5_t6)
+
+```
+:::
+
+### Semivariograms
+
+```{r}
+#| label: fig-variograms-t6
+#| warning: false
+#| fig-cap: 
+#|   - "Semivariogram for Model 1 (Baseline Model)"
+#|   - "Semivariogram for Model 2 (Row and column groups as fixed)"
+#|   - "Semivariogram for Model 3 (AR1 in residuals)"
+#|   - "Semivariogram for Model 4 (AR1 in residuals + nugget effect)"
+#|   - "Semivariogram for Model 5 (AR1 in residuals + nugget effect + linear trend)"
+
+plot(varioGram(model_1_t6, type = "default", spatial = "trend",
+formula = ~NULL, composite = TRUE, model = c("empirical"),
+metric = c("euclidean"), angle = 0, angle.tol = 180,
+nlag = 20, maxdist = 0.5, xlag = NA, lag.tol = 0.5, grid = TRUE))
+
+plot(varioGram(model_2_t6, type = "default", spatial = "trend",
+formula = ~NULL, composite = TRUE, model = c("empirical"),
+metric = c("euclidean"), angle = 0, angle.tol = 180,
+nlag = 20, maxdist = 0.5, xlag = NA, lag.tol = 0.5, grid = TRUE))
+
+plot(varioGram(model_3_t6, type = "default", spatial = "trend",
+formula = ~NULL, composite = TRUE, model = c("empirical"),
+metric = c("euclidean"), angle = 0, angle.tol = 180,
+nlag = 20, maxdist = 0.5, xlag = NA, lag.tol = 0.5, grid = TRUE))
+
+plot(varioGram(model_4_t6, type = "default", spatial = "trend",
+formula = ~NULL, composite = TRUE, model = c("empirical"),
+metric = c("euclidean"), angle = 0, angle.tol = 180,
+nlag = 20, maxdist = 0.5, xlag = NA, lag.tol = 0.5, grid = TRUE))
+
+plot(varioGram(model_5_t6, type = "default", spatial = "trend",
+formula = ~NULL, composite = TRUE, model = c("empirical"),
+metric = c("euclidean"), angle = 0, angle.tol = 180,
+nlag = 20, maxdist = 0.5, xlag = NA, lag.tol = 0.5, grid = TRUE))
+
+```
+
+### AIC {#sec-AIC6}
+
+```{r}
+#| output: false
+#| warning: false
+
+#AIC comparison
+
+modsel_t6 = icREML(list(model_1_t6, model_2_t6, model_3_t6, model_4_t6, model_5_t6)); modsel_t6
+modsel_t6 <- as.data.frame(modsel_t6)
+
+```
+
+::: panel-tabset
+### Model 1
+
+```{r}
+icREML(list(model_1_t6))
+```
+
+### Model 2
+
+```{r}
+icREML(list(model_2_t6))
+```
+
+### Model 3
+
+```{r}
+icREML(list(model_3_t6))
+```
+
+### Model 4
+
+```{r}
+icREML(list(model_4_t6))
+```
+
+### Model 5
+
+```{r}
+icREML(list(model_5_t6))
+```
+:::
+
+### Spatial Distribution of Residuals
+
+```{r}
+#| label: fig-resplot-t6
+#| fig-cap: "Spatial Distribution of residuals (Trial 6)"
+resid_long <- t6 %>%
+  mutate(
+    row_number = as.numeric(as.character(row_number)),
+    col_number = as.numeric(as.character(col_number)),
+    Model_1 = residuals(model_1_t6, type = "response"),
+    Model_2 = residuals(model_2_t6, type = "response"),
+    Model_3 = residuals(model_3_t6, type = "response"),
+    Model_4 = residuals(model_4_t6, type = "response"),
+    Model_5 = residuals(model_5_t6, type = "response"))  |> 
+  pivot_longer(
+    cols = starts_with("Model_"),
+    names_to = "Model",
+    values_to = "Residual")
+
+lim <- max(abs(resid_long$Residual), na.rm = TRUE)
+
+ggplot(
+  resid_long,
+  aes(
+    x = col_number,
+    y = row_number,
+    fill = Residual
+  )
+) +
+  geom_tile(color = "white", linewidth = 0.2) +
+  scale_fill_gradient2(
+  low = "#2166AC",
+  mid = "#F7F7F7",
+  high = "#B35806",
+  midpoint = 0,
+  limits = c(-lim, lim)) +
+  coord_fixed() +
+  scale_y_reverse() +
+  facet_wrap(~Model) +
+  theme_minimal() +
+  labs(
+    title = "Spatial distribution of residuals",
+    x = "Column",
+    y = "Row"
+  )
+```
+
+### Best Model and Ranking
+
+```{r}
+#| label: t6-blups
+#| results: hide
+
+#BLUPs
+blup1_t6 <- predict.asreml(model_1_t6, classify = "geno.cod", sed = TRUE)
+blup2_t6 <- predict.asreml(model_2_t6, classify = "geno.cod", sed = TRUE)
+blup3_t6 <- predict.asreml(model_3_t6, classify = "geno.cod", sed = TRUE)
+blup4_t6 <- predict.asreml(model_4_t6, classify = "geno.cod", sed = TRUE)
+blup5_t6 <- predict.asreml(model_5_t6, classify = "geno.cod", sed = TRUE)
+
+blup_t6 <- list(blup1_t6, blup2_t6, blup3_t6, blup4_t6, blup5_t6)
+predic_value_t6 <- list()
+
+for (i in 1:length(blup_t6)) {
+  
+  predic_value_t6[[i]] <- blup_t6[[i]]$pvals |> 
+    dplyr::select(predicted.value, dplyr::everything()) |> 
+    dplyr::arrange(desc(predicted.value))
+
+}
+
+#blues - average of all checks together
+blues_checks1_t6 <- predict(model_1_t6, classify = "check.cod")$pvals
+blues_checks2_t6 <- predict(model_2_t6, classify = "check.cod")$pvals
+blues_checks3_t6 <- predict(model_3_t6, classify = "check.cod")$pvals
+blues_checks4_t6 <- predict(model_4_t6, classify = "check.cod")$pvals
+blues_checks5_t6 <- predict(model_5_t6, classify = "check.cod")$pvals
+
+blue_t6 <- list(blues_checks1_t6, blues_checks2_t6, blues_checks3_t6, blues_checks4_t6, blues_checks5_t6)
+bpredic_value_t6 <- list()
+
+for (i in 1:length(blue_t6)) {
+  
+  bpredic_value_t6[[i]] <- blue_t6[[i]] |> 
+        dplyr::filter(check.cod != "Candidato") |>
+    dplyr::select(predicted.value, dplyr::everything()) |> 
+    dplyr::arrange(desc(predicted.value))  
+}
+
+```
+
+```{r}
+#| label: fig-h2-t6
+#| fig-cap: "BLUPs ranking correlation (Trial 6)"
+
+# Selecting baseline model and best model
+t6_comp <- blup_comparison(blup1_t6$pvals, blup3_t6$pvals, m1_name = "Model 1", m2_name = "Best Model")
+t6_comp$ranking_plot
+```
+
+### Broad-sense Heritability
+
+```{r}
+#| label: tbl-heritability-t6
+#| tbl-cap: Broad-sense Heritability (Cullis, 2006) of the different models to spatial correction
+
+# Heritabilities - Generalized heritability
+h2_mod1_t6 <- 1-(mean(blup1_t6$sed[upper.tri(blup1_t6$sed)]^2)/(2*varcomp_m1_t6[6,1]))
+h2_mod2_t6 <- 1-(mean(blup2_t6$sed[upper.tri(blup2_t6$sed)]^2)/(2*varcomp_m2_t6[3,1]))
+h2_mod3_t6 <- 1-(mean(blup3_t6$sed[upper.tri(blup3_t6$sed)]^2)/(2*varcomp_m3_t6[6,1]))
+h2_mod4_t6 <- 1-(mean(blup4_t6$sed[upper.tri(blup4_t6$sed)]^2)/(2*varcomp_m4_t6[6,1]))
+h2_mod5_t6 <- 1-(mean(blup5_t6$sed[upper.tri(blup5_t6$sed)]^2)/(2*varcomp_m5_t6[6,1]))
+
+h2_t6 <- data.frame(
+  Model = c("Model 1", "Model 2", "Model 3", "Model 4", "Model 5"),
+  H2 = c(h2_mod1_t6, h2_mod2_t6, h2_mod3_t6, h2_mod4_t6, h2_mod5_t6))
+
+options(knitr.table.format = "html")
+
+h2_t6 |> 
+  kbl(caption = " ", digits = 2) |> 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE) 
+```
+
+# Discussion
+
+Across all trial–model combinations analyzed, both the check and
+candidate genotype effects were significant. For the check effects
+(fixed), Wald test results indicated that at least two check means
+differed significantly. Regarding the candidate genotype effects
+(random), LRT tests indicated that the variance component associated
+with this effect was significantly greater than zero in all cases,
+confirming that genetic variance among the genotypes evaluated exists in
+the trials.
+
+Now, we will discuss about the spatial corrections within trials.
+
+### Trial 1
+
+When comparing the adjusted AIC values among the five models, the lowest
+value was observed for Model 4 (7978.3), compared with 8095.3 for Model
+1 (no spatial correction) @sec-AIC1 .
+
+These results indicate that, in this trial, the inclusion of an AR1
+residual correlation structure improved the model relative to the
+uncorrected model, however, the semivariogram still displayed a lot of
+scattered peaks @fig-variograms-t1-3 . With the addition of a nugget
+effect (Model 4), the semivariogram surface became smoother and the
+range of the z-axis decreased, indicating an improvement in the spatial
+correction
+
+The spatial distribution of residuals across plots did not reveal an
+evident systematic pattern and the spatial correction structures reduced
+the magnitude of the residuals relative to the uncorrected model
+@fig-resplot-t1 , which was also reflected in an increase in the
+estimated heritability, since residual variance decreased
+@tbl-heritability-t1
+
+When comparing the genotype BLUP rankings between the uncorrected model
+and the best-fitting model (Model 4, selected based on AIC and
+semivariogram inspection), the Spearman rank correlation was 0.9105,
+indicating the presence of reordering of genotypes, particularly among
+genotypes of intermediate rank @fig-h2-t1.
+
+As shown in the corresponding figure, genotypes at the extremes of the
+ranking distribution were the least affected by re-ranking (the diagonal
+of the plot) .
+
+### Trial 2
+
+For the second trial, the lowest adjusted AIC was also obtained for
+Model 4 (8684.8), however, the reduction relative to the uncorrected
+model (8695.9) was minimal. Models 3 and 5 even showed an increase in
+AIC, indicating that the additional parameters included in those models
+did not sufficiently account for the residual variation @sec-AIC2 .
+
+Although Model 4 achieved the lowest AIC in this trial, its
+semivariogram revealed a more pronounced residual pattern in the central
+area of the experiment @fig-variograms-t2-4
+
+As shown in @fig-variograms-t2-5 and @fig-resplot-t2 , the more heavily
+parameterized spatial models reduced the overall magnitude of the
+residuals but, in doing so, made an underlying residual spatial pattern
+more apparent, with larger residual values concentrated in the central
+region of the trial. This pattern could potentially be addressed through
+the use of other residual covariance structures.
+
+Given that the variance components @sec-VC2 , heritability estimates
+@tbl-heritability-t2 and BLUP rankings @fig-h2-t2 were highly similar
+between Models 1 and 4, these two models can be considered to perform
+comparably in this trial.
+
+### Trial 3
+
+For the third trial, the lowest adjusted AIC was obtained for Model 4
+(8682.9), compared with 8694.1 for the uncorrected Model 1. Although the
+magnitude of the AIC reduction was larger than that observed in Trial 2,
+the overall pattern was similar @sec-AIC3 .
+
+Inspection of the semivariograms @fig-variograms-t3-3 and residual plots
+@fig-resplot-t3 also revealed a more pronounced error pattern in the
+central area of the trial. Because this trial was conducted at the same
+location as Trial 2, this pattern may be attributable to an uncontrolled
+factor related to soil fertility, water availability or other management
+factor, that is not accounted for by the current model. Alternative
+spatial correction structures might further improve model fit.
+
+As in Trial 2, the variance components (genetic and residual) @sec-VC3,
+heritability estimates @tbl-heritability-t3, and ranking correlations
+@fig-h2-t3 were highly similar between Models 1 and 4, indicating
+comparable performance between these models.
+
+### Trial 4
+
+In this trial, Model 4 produced the largest AIC reduction among all
+models evaluated (6910.6 vs. 6972.3 for the uncorrected model). As in
+Trial 1, the inclusion of the AR1 residual structure improved the AIC
+relative to the uncorrected model @sec-AIC4, however, the semivariogram
+still showed numerous scattered peaks @fig-variograms-t4-3 .
+
+With the addition of the nugget effect (Model 4), the semivariogram
+surface became smoother and the range of the z-axis decreased, again
+indicating an improvement in the spatial correction @fig-variograms-t4-4
+.
+
+As shown in the corresponding figure, Model 4 reduced the magnitude of
+the residuals without generating an evident spatial dispersion pattern.
+This reduction in residual variance also led to higher heritability
+estimates @tbl-heritability-t4 .
+
+Considering Model 4 the best-performing model in this trial, some
+changes in genotype rankings were observed relative to the uncorrected
+model; however, genotypes with the most extreme performance retained
+their rankings, particularly KML942, which was also the top-ranked
+genotype in Trial 1 @fig-h2-t4 .
+
+### Trial 5
+
+For this trial, Model 5 produced the lowest adjusted AIC among all
+models tested (5445.0 vs. 5483.7 for the uncorrected model) @sec-AIC5 .
+The semivariogram of Model 5 showed a reduction in the range of z-axis
+values, indicating an improved spatial fit comparing to Model 3
+@fig-variograms-t5-5 .
+
+Analysis of the variance components showed that the spatial correction
+reduced the magnitude of the residual variance component @sec-VC5 . In
+Model 5, the estimated spatial correlation parameters for rows and
+columns, $\rho_{row} = 0.76$ and $\rho_{col} = -0.26$, indicate a
+stronger correlation among residuals along rows than along columns. With
+this spatial correction, other variance components (such as the colgroup
+and rowgroup effects) were estimated as zero, probably because the
+spatial structure was able to capture the variation previously
+attributed to these terms.
+
+Heritability estimates also increased with the spatial correction,
+indicating that Model 5 may be the most appropriate model for this trial
+@tbl-heritability-t5 .
+
+### Trial 6
+
+In this trial, the lowest adjusted AIC was obtained for Model 3 (3565.0
+vs. 3574.2 for the uncorrected model) @sec-AIC6 .
+
+Note that Model 3 only includes an AR1 residual correlation structure,
+and the addition of a nugget effect (Model 4) did not improve the model
+fit, as the variance component corresponding to the nugget effect was
+estimated as null @sec-VC6 .
+
+The semivariograms of the different models also showed a very similar
+pattern, possibly because the AR1 structure had already captured most of
+the spatially structured variation present in the residuals
+@fig-variograms-t6-4 .
+
+The estimated correlation parameters for rows and columns in Model 3,
+$\rho_{row} = 0.19$ and $\rho_{col} = 0.04$ indicate a very weak spatial
+correlation, comparing to the values observed in the previous trials
+@sec-VC6 .
+
+This result, together with the similarity in heritability estimates
+@tbl-heritability-t6 and residual plots between models @fig-resplot-t6 ,
+indicates that the spatial corrections tested did not substantially
+change the magnitude of the residuals. Other covariance structures could
+be explored in future analyses, however, considering only the structures
+tested here and selecting the model with the lowest AIC (Model 3), no
+major changes in genotype ranking were observed relative to the
+uncorrected model @fig-h2-t6 . Overall, model performance was very
+similar across models in this trial.
