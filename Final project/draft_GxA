@@ -43,8 +43,8 @@ ggplot() +
   theme_bw(base_size = 14) +
   theme(legend.position = "top",
         axis.text.x = element_text(angle = 45, hjust = 1)) +
-  scale_colour_manual(values = c("forestgreen", "firebrick")) +
-  scale_fill_manual(values = c("forestgreen", "firebrick"))
+  scale_colour_manual(values = c("firebrick","forestgreen")) +
+  scale_fill_manual(values = c("firebrick","forestgreen"))
 
 # ------------------------------------------------------------------------------
 # 3. REGRESSÃO DE EBERHART-RUSSELL
