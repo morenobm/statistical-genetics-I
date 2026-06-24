@@ -1,0 +1,391 @@
+---
+title: "Preview Final Project"
+author: 
+  - name: Bruna Moreno, Daniele Bononi, João Vitor Calvo, Renan Fantine
+    affiliation:
+      - name: Department of Genetics, ESALQ-USP
+        city: Piracicaba, São Paulo, Brazil
+format: 
+  html:
+    toc: true
+    toc-location: left
+    code-overflow: wrap
+    code-fold: true
+    fig-align: center
+    fig-width: 10
+    theme: 
+      light: journal
+      dark: darkly
+    embed-resources: true
+crossref: {}
+editor: 
+  markdown: 
+    wrap: 72
+---
+
+# Exercise
+
+Using provided datasets, you are expected to analyse the data and
+interpret the results by applying the concepts and methodologies covered
+throughout the course.
+
+Please develop a report using R Markdown or Quarto. The final document
+must include the following sections:
+
+Introduction: A brief overview of the research problem. Materials and
+Methods: A detailed description of the statistical approach. Results: A
+clear presentation of the findings (with Figures and Tables).
+Discussion: A concise interpretation of the results in the context of
+the study.
+
+# Introduction
+
+This report provides a data analysis of a multi-environment soybean
+breeding in Zambia dataset, focusing on two agronomic traits **Grain
+Yield** and **Plant Height**. The experimental design of the 33 trials
+in Zambia dataset is Randomized Complete Block Design (RCBD), in which
+all trials are located in different environment, being the **environment
+a combination of year x local**.
+
+```{r}
+#| label: setup
+#| include: false
+
+knitr::opts_chunk$set(
+  fig.show = "hold",
+  warning = FALSE,
+  message = FALSE,
+  results = "hold")
+```
+
+```{r}
+#| label: trials-data
+
+# Loading packages
+packages <- c("ggplot2", "patchwork", "tidyr", "dplyr", "purrr", "knitr", "kableExtra", "grid","ggcorrplot", "asreml","gt")
+invisible(lapply(packages, function(p){
+  suppressMessages(suppressPackageStartupMessages(
+  suppressWarnings(library(p, character.only = TRUE))))}))
+
+# Loading phenotypic data (Zambia)
+data = read.csv("https://raw.githubusercontent.com/mauricioaraujj/Pan_African_Trials_Network/refs/heads/main/data/data.csv", sep = ';') |> filter(COUNTRY == "Zambia")
+```
+
+```{r}
+#| label: env-year-table
+#| tbl-cap: "Environment distribution"
+
+env_year_table <- data |>
+  distinct(loc, YEAR, env) |>
+  pivot_wider(
+    names_from = YEAR,
+    values_from = env,
+    values_fn = list(env = paste),
+    values_fill = "-"
+  )
+
+env_year_table |>
+  gt(rowname_col = "loc") |>
+  tab_header(
+    title = "Environment distribution"
+  ) |>
+  cols_align(
+    align = "center",
+    columns = everything()
+  ) |>
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_column_labels()
+  ) |>
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_stub()
+  ) |>
+  tab_options(
+    table.width = pct(100),
+    table.font.size = 12
+  )
+```
+
+# Outliers Removal
+
+First, we performed some analysis to remove outlier data that are not
+agronomically consistent, and we standardized the codification of
+missing information to NA.
+
+```{r}
+#| label: outliers_GY
+
+# Normal Distribution Sd's
+ggplot(data, aes(x = GY)) +
+  geom_histogram(bins = 100, fill = "steelblue", alpha = 0.7) +
+  geom_vline(xintercept = mean(data$GY, na.rm = TRUE), 
+             color = "red", linetype = "dashed", size = 1) +
+  geom_vline(xintercept = mean(data$GY, na.rm = TRUE) + 
+               c(-3, 3) * sd(data$GY, na.rm = TRUE), 
+             color = "orange", linetype = "dotted", size = 1) +
+  labs(title = "Histogram with outlier limits (±3σ)",
+       x = "Value", y = "Frequency") +
+  theme_minimal()
+
+# Boxplot outliers
+p_hist <- ggplot(data, aes(x = GY)) +
+  geom_histogram(bins = 100, fill = "steelblue", alpha = 0.7) +
+  theme_minimal() +
+  theme(axis.title.x = element_blank())
+
+p_box <- ggplot(data, aes(y = GY, x = "")) +
+  geom_boxplot(fill = "steelblue", alpha = 0.7, outlier.color = "red", 
+               outlier.size = 2, outlier.alpha = 0.5) +
+  coord_flip() +
+  theme_minimal() +
+  theme(axis.title.y = element_blank(),
+        axis.text.y = element_blank())
+
+p_hist / p_box + plot_layout(heights = c(3, 1))
+
+## Removing outliers
+df <- data|> 
+  mutate (GY = case_when(
+    GY == 10650.85 ~ NA,
+    TRUE ~ GY
+  )) |> 
+  mutate(PH_R8 = case_when(
+    PH_R8 == 0 ~ NA,
+    PH_R8 == 0.0 ~ NA,
+    PH_R8 == 308.33 ~ NA,
+    TRUE ~ PH_R8
+  ))
+
+## Converting columns
+df$YEAR <- as.factor(df$YEAR)
+df$loc <- as.factor(df$loc)
+df$env <- as.factor(df$env)
+df$check <- as.factor(df$check)
+df$rep <- as.factor(df$rep)
+df$gen <- as.factor(df$gen)
+df$RAINFED <- as.factor(df$RAINFED)
+```
+
+# Single Trial - Statistical Model
+
+Then, each trial was analysed separately, to have a better understanding
+of the aspects related to the quality of the data collected in each
+trial. This was done by analysing the broad-sense heritability ($H^{2}$)
+and the coefficient of variation ($CV%$).
+
+Within each trial (RCBD) there are 3 blocks and approximately 30
+genotypes, and for both traits analysed, the statistical model used is
+describe as follow:
+
+$$y_{ij}=b_{j}+g_{i}+e_{ij}$$
+
+Where:
+
+$b_{j}$ is the block fixed effects, as there are only 3 blocks within
+each experiment.
+
+$g_{i}$ is the genotype's random effects, where
+$g_i \sim N(0, \sigma^2_g)$. This was decided due to the unbalanced
+nature of the data, as some trials had missing plots.
+
+$e_{ij}$ is the residual random effect, where
+$e_{ij} \sim N(0, \sigma^2_e)$. That is, assuming indepedence of
+residuals within trials
+
+As most trials are completely balanced, the broad-sense heritability was estimated as: 
+
+- individual/plot level: $H² = \frac{\sigma²_g}{ \sigma²_g + \sigma²_e}$, 
+- genotype level: $H² = \frac{\sigma²_g}{ \sigma²_g + \frac{\sigma^2_e}{3}}$ 
+- Cullis, 2006:  $ H^2 =  1 - \frac{\bar{SED^2}}{2\sigma²_g}$
+
+# Trait 1 - GY
+
+```{r}
+#| label: GY_missing_data
+
+# Lista de ambientes
+envs_list <- unique(as.character(df$env))
+
+# Verificando dados faltantes para GY em cada ENV
+info_env_GH <- df |>
+  group_by(env) |>
+  summarise(
+    obs = n(),
+    NAs = sum(is.na(GY)),
+    .groups = "drop")
+```
+
+```{r}
+#| label: GY_analysis
+#| output: false
+
+# Rodando para cada trial isoladamente
+singleTrial_models_GY <- list()
+singleTrial_varcomp_GY <- list()
+singleTrial_blup_GY <- list()
+singleTrial_reliability_GY <- list()
+tabela_geral_GY <- data.frame(env = character(),LRTstat = numeric(),pvalue = numeric(),significance = logical(), h2_plot = numeric(),h2_gen = numeric(), h2_cullis = numeric(), cv = numeric(), stringsAsFactors = FALSE)
+
+for (i in envs_list){
+  
+  df_env <- df |> filter(env == i)
+  df_env$gen <- as.factor(df_env$gen)
+  df_env$rep <- as.factor(df_env$rep)
+  i <- as.character(i)
+  
+  model <- asreml(fixed = GY ~ rep,
+                               random = ~ gen ,
+                               data = df_env,
+                               maxit = 100,
+                               na.action = na.method(y=c("omit")))
+
+  varcomp <- summary(model)$varcomp
+  
+  blups <- predict.asreml(model, classify = "gen", sed = TRUE)
+  
+  pred_BLUP <- blups$pvals |> 
+    dplyr::select(predicted.value, dplyr::everything()) |> 
+    dplyr::arrange(desc(predicted.value))
+  
+  m_red_GY <- asreml(fixed = GY ~ rep,
+                               data = df_env,
+                               maxit = 100,
+                               na.action = na.method(y=c("omit")))
+  
+  pval <- lrt(model, m_red_GY, boundary = T)  
+  
+  h2_plot <- vpredict(model, H2 ~ V1/(V1+V2)) # nível de parcela
+  h2_gen <- varcomp[1,1] / (varcomp[1,1]+(varcomp[2,1]/3)) # ind
+  h2_cullis <- 1-(mean(blups$sed[upper.tri(blups$sed)]^2)/(2*varcomp[1,1]))
+  
+  cv <- sqrt(varcomp[2,1])/mean(df_env$GY, na.rm=T)
+  
+  reliability <- 1 - (pred_BLUP$std.error^2/varcomp[1,1])
+  
+  tabela_geral_GY <- rbind(tabela_geral_GY,
+    data.frame(
+      env = i,
+      LRTstat = round(pval$`LR-statistic`,digits=3),
+      pvalue = round(pval$`Pr(Chisq)`,digits=4) ,
+      significance = pval$`Pr(Chisq)` < 0.05,
+      h2_plot = round(h2_plot$Estimate,digits=4),
+      h2_gen = round(h2_gen,digits = 4),
+      h2_cullis = round(h2_cullis,digits = 4),
+      cv = round((cv*100),digits=2)))
+  
+  singleTrial_models_GY[[i]] <- model
+  singleTrial_varcomp_GY[[i]] <- varcomp
+  singleTrial_blup_GY[[i]] <- blups$pvals
+  singleTrial_reliability_GY[[i]] <- reliability
+  }
+```
+
+```{r}
+
+tabela_geral_GY |>
+  mutate(
+    highlight = env %in% c("E0108", "E0175", "E0285")) |> 
+  gt(rowname_col = "env") |>
+  tab_header(
+    title = "Single-trial analysis for grain yield"
+  ) |>
+  tab_style(
+    style = cell_fill(color = "#e8f5e9"),
+    locations = cells_body(
+      rows = highlight == TRUE
+    )
+  ) |>
+  cols_hide(
+    columns = c(significance, highlight)
+  ) |>
+  cols_label(
+    LRTstat = "LRT",
+    pvalue = "P-value",
+    h2_plot = html("H<sup>2</sup><sub>plot</sub>"),
+    h2_gen = html("H<sup>2</sup><sub>genotype</sub>"),
+    h2_cullis = html("H<sup>2</sup><sub>Cullis</sub>"),
+    cv = "CV (%)"
+  ) |>
+  fmt_number(
+    columns = c(LRTstat, pvalue, h2_plot, h2_gen, h2_cullis, cv),
+    decimals = 4
+  ) |>
+  cols_align(
+    align = "center",
+    columns = everything()
+  ) |>
+  tab_options(
+    table.font.size = px(12),
+    table.width = pct(100)
+  )
+
+```
+
+Com base nas herdabilidades observadas na tabela acima, nota-se que as observações dos ambientes "E0108", "E0175" e "E0285" tem uma herdabildiade nula ou muito pequena. Isso mostra que somente uma pequena parte da variação das observações desses experimentos são causadas por fatores genético, e grande parte é causada pelo efeito do ambiente e fatores não controlados. 
+
+Analisar se o modelo fica melhor removendo esses ambientes ou não
+
+```{r}
+# Removing envs "E0108", "E0175" e "E0285"
+df_filter <- df |> filter(!(env %in% c("E0108", "E0175", "E0285")))
+
+# New table
+env_year_table <- df_filter |>
+  distinct(loc, YEAR, env) |>
+  pivot_wider(
+    names_from = YEAR,
+    values_from = env,
+    values_fn = list(env = paste),
+    values_fill = "-"
+  )
+
+env_year_table |>
+  gt(rowname_col = "loc") |>
+  tab_header(
+    title = "Environment distribution"
+  ) |>
+  cols_align(
+    align = "center",
+    columns = everything()
+  ) |>
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_column_labels()
+  ) |>
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_stub()
+  ) |>
+  tab_options(
+    table.width = pct(100),
+    table.font.size = 12
+  )
+```
+
+```{r}
+#| label: fig-blup_by_envs_plots_GY
+
+blup_all_GY <- bind_rows(
+  lapply(names(singleTrial_blup_GY), function(env){
+    df <- singleTrial_blup_GY[[env]]
+    df$env <- env
+    return(df)}))
+
+ggplot(blup_all_GY,
+       aes(x = env, y = predicted.value, group = gen, color = gen)) +
+      geom_line(alpha = 0.3) +
+      geom_point(size = 1) +
+      theme_minimal() +
+      labs(x = "Environment", y = "Predicted BLUP (GY)",
+        title = "2019 - 2023 Genotype's Predicted Values Across Diferent Environments") +
+      theme(axis.text.x = element_text(angle = 45, hjust = 1),legend.position = "none")
+```
+
+
+
+The fluctuation in the top-ranking positions highlights the presence of a strong Genotype by Environment (GxE) interaction (cross-over patterns) @fig-blup_by_envs_plots_GY
+
+Devido à interação, analisaremos todos os ambientes juntos (estabilidade e GxE)
+
+# Multi trial - Statistical Model
