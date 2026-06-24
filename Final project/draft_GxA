@@ -1,0 +1,80 @@
+library(asreml)
+library(tidyverse)
+library(ggpubr)
+library(metan)
+
+# ------------------------------------------------------------------------------
+# 1. PREPARAÇÃO DOS DADOS
+# ------------------------------------------------------------------------------
+
+url_soja <- "https://raw.githubusercontent.com/mauricioaraujj/Pan_African_Trials_Network/refs/heads/main/data/data.csv"
+
+dat <- read.csv(url_soja, sep = ';') |> 
+  filter(COUNTRY == "Zambia") |>
+  mutate(
+    env  = as.factor(env),
+    gen  = as.factor(gen),
+    rep  = as.factor(rep)
+  ) |>
+  filter(!is.na(GY))
+
+cat("Ambientes totais:", nlevels(dat$env), "\n")
+cat("Genótipos totais:", nlevels(dat$gen), "\n")
+
+# ------------------------------------------------------------------------------
+# 2. ÍNDICE AMBIENTAL (Finlay-Wilkinson)
+# ------------------------------------------------------------------------------
+
+index <- data.frame(
+  index = tapply(dat$GY, dat$env, mean) - mean(dat$GY)
+) |> rownames_to_column("env")
+
+dat_grafico_amb <- merge(dat, index, by = "env")
+
+ggplot() +
+  geom_point(data = subset(index, index < 0),
+             aes(x = env, y = index, colour = "Desfavorável", fill = "Desfavorável"),
+             size = 2.5, shape = 25) +
+  geom_point(data = subset(index, index > 0),
+             aes(x = env, y = index, colour = "Favorável", fill = "Favorável"),
+             size = 2.5, shape = 24) +
+  geom_hline(aes(yintercept = 0), linetype = "dashed", linewidth = 1.2) +
+  labs(y = "Índice Ambiental", x = "Ambiente", colour = "", fill = "") +
+  theme_bw(base_size = 14) +
+  theme(legend.position = "top",
+        axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_colour_manual(values = c("forestgreen", "firebrick")) +
+  scale_fill_manual(values = c("forestgreen", "firebrick"))
+
+# ------------------------------------------------------------------------------
+# 3. REGRESSÃO DE EBERHART-RUSSELL
+# ------------------------------------------------------------------------------
+
+ERm <- metan::ge_reg(
+  .data   = dat,          
+  env     = "env",
+  gen     = "gen",
+  rep     = "rep",
+  resp    = "GY",
+  verbose = FALSE
+)
+
+# Selecionar os genótipos com maior média geral (b0)
+top_gen <- ERm$GY$regression |>
+  arrange(desc(b0)) |>
+  slice(1:30) |> #dá para mudar os 30
+  pull(GEN) |>
+  as.character()
+
+#mantém os genótipos mesmo que ná esteja em todos os ambientes?
+
+ggplot(data = subset(ERm$GY$data, GEN %in% top_gen),
+       aes(x = IndAmb, y = Y)) +
+  facet_wrap(. ~ GEN) +
+  geom_smooth(method = "lm", formula = y ~ x, se = FALSE, colour = "#10342d") +
+  geom_point(aes(colour = ENV), size = 2) +
+  theme_bw(base_size = 14) +
+  geom_vline(xintercept = 0, linetype = "dotted") +
+  labs(x = "Índice Ambiental", y = "Produtividade (GY)", colour = "Ambiente") +
+  scale_color_viridis_d(option = "turbo") +
+  stat_regline_equation()
