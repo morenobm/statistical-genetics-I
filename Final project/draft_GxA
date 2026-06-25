@@ -79,6 +79,8 @@ ggplot(data = subset(ERm$GY$data, GEN %in% top_gen),
   scale_color_viridis_d(option = "turbo") +
   stat_regline_equation()
 
+
+
 # ------------------------------------------------------------------------------
 # 4. DECOMPOSIÇÃO AMMI
 # ------------------------------------------------------------------------------
@@ -98,11 +100,11 @@ dat_ammi_completo <- dat |>
   left_join(medias_env, by = "env") |>
   left_join(medias_gen, by = "gen") |>
   mutate(
+    # Se o GY for NA, preenche com o modelo aditivo; caso contrário, mantém o GY real
     GY = ifelse(is.na(GY), media_geral + efeito_env + efeito_gen, GY)
   ) |>
-  select(env, gen, rep, GY)
+  select(env, gen, rep, GY) # Manter apenas as colunas necessárias
 
-# AMMI 
 ammi <- metan::performs_ammi(
   .data = dat_ammi_completo,
   env   = "env",
@@ -111,7 +113,161 @@ ammi <- metan::performs_ammi(
   resp  = "GY"
 )
 
-# Biplots
 plot(ammi, type = "AMMI1")
 plot(ammi, type = "AMMI2")
-#qual a diferença?
+
+# ------------------------------------------------------------------------------
+# 5. MODELOS MISTOS
+# ------------------------------------------------------------------------------
+
+# mod1: Baseline
+mod1 <- asreml(
+  fixed    = GY ~ 1,
+  random   = ~ env + rep:env + gen + gen:env,
+  residual = ~ idv(units),
+  data     = dat
+)
+aic1 <- summary(mod1)$aic
+
+# mod2: Resíduo heterogêneo por ambiente
+mod2 <- asreml(
+  fixed    = GY ~ 1,
+  random   = ~ env + rep:env + gen + gen:env,
+  residual = ~ dsum(~units | env),
+  data     = dat
+)
+aic2 <- summary(mod2)$aic
+
+# mod3: Repetição aninhada no ambiente
+mod3 <- asreml(
+  fixed    = GY ~ 1,
+  random   = ~ env + env:rep + gen + gen:env,
+  residual = ~ dsum(~units | env),
+  data     = dat
+)
+aic3 <- summary(mod3)$aic
+
+# mod4: Variância genética heterogênea por ambiente (DIAG)
+mod4 <- asreml(
+  fixed    = GY ~ 1,
+  random   = ~ env + env:rep + diag(env):gen,
+  residual = ~ dsum(~units | env),
+  data     = dat
+)
+aic4 <- summary(mod4)$aic
+
+# mod5: Correlação homogênea entre ambientes (HCS)
+mod5 <- asreml(
+  fixed    = GY ~ 1,
+  random   = ~ env + env:rep + corh(env):gen,
+  residual = ~ dsum(~units | env),
+  data     = dat
+)
+for (i in 1:3) mod5 <- update.asreml(mod5)
+aic5 <- summary(mod5)$aic
+
+# mod6: Correlação heterogênea entre ambientes (CORGH)
+# mod6 <- asreml(
+#  fixed    = GY ~ 1,
+ # random   = ~ env + env:rep + corgh(env):gen,
+#  residual = ~ dsum(~units | env),
+#  data     = dat,
+#  maxit    = 50
+#)
+#for (i in 1:3) mod6 <- update.asreml(mod6)
+#aic6 <- summary(mod6)$aic
+#não deu bom
+
+# ------------------------------------------------------------------------------
+# 6. COMPARAÇÃO DE MODELOS PELO AIC
+# ------------------------------------------------------------------------------
+
+modelos_aic <- data.frame(
+  modelo = factor(
+    c("CS-ID(R)", "CS-DIAG(R)", "CS(G)-Rep:env-DIAG(R)",
+      "DIAG(G)-Rep:env-DIAG(R)", "HCS(G)-Rep:env-DIAG(R)"),
+    levels = c("CS-ID(R)", "CS-DIAG(R)", "CS(G)-Rep:env-DIAG(R)",
+               "DIAG(G)-Rep:env-DIAG(R)", "HCS(G)-Rep:env-DIAG(R)") 
+  ),
+  AIC = c(aic1, aic2, aic3, aic4, aic5)
+
+ggplot(modelos_aic, aes(y = modelo, x = AIC)) +
+  geom_point(size = 3, shape = 15, colour = "#10342d") +
+  geom_segment(aes(x = min(AIC) - 50, xend = AIC, y = modelo, yend = modelo),
+               linewidth = 1.5, colour = "#10342d") +
+  geom_label(aes(label = round(AIC, 1)), size = 4,
+             position = position_nudge(y = 0.3, x = -30)) +
+  theme_minimal(base_size = 14) +
+  labs(y = "Modelo", x = "AIC",
+       title = "Comparação de estruturas de covariância G×A",
+       subtitle = "Variável resposta: GY | Dados Zâmbia (Soja)")
+
+#model 5 teve menor IAC
+
+# ------------------------------------------------------------------------------
+# 7. PREDIÇÕES DO MELHOR MODELO 
+# ------------------------------------------------------------------------------
+
+melhor_mod <- mod5 # o model 5 teve o melnor AIC
+
+pred <- predict.asreml(
+  object   = melhor_mod,
+  classify = "gen:env"
+)$pvals
+
+pred |>
+  ggplot(aes(x = reorder(env, -predicted.value),
+             y = reorder(gen, predicted.value),
+             fill = predicted.value)) +
+  geom_tile() +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "right",
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank()) + 
+  scale_fill_gradient(low = "#10342d", high = "#b2bc63") +
+  labs(x = "Ambiente", y = "Genótipo", fill = "GY",
+       title = "Valores preditos — Genótipo × Ambiente")
+
+# ------------------------------------------------------------------------------
+# 8. ÍNDICES DE ESTABILIDADE 
+# ------------------------------------------------------------------------------
+
+ge_table <- pred[, c("gen", "env", "predicted.value")] |>
+  pivot_wider(names_from = "env", values_from = "predicted.value") |>
+  column_to_rownames("gen")
+
+# -- Índice Pi (Lin & Binns) --
+Pi <- apply(ge_table, 1, function(x) {
+  sum((x - apply(ge_table, 2, max))^2) / (2 * ncol(ge_table))
+})
+
+df_Pi <- data.frame(gen = names(Pi), Pi = Pi) |>
+  arrange(Pi) |>
+  slice(1:15) #top 15
+
+ggplot(data = df_Pi, aes(x = reorder(gen, Pi), y = Pi)) +
+  geom_col(colour = "black", aes(fill = Pi)) +
+  scale_fill_gradient(high = "#10342d", low = "#b2bc63") +
+  theme_minimal(base_size = 13) +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+        legend.position = "none") +
+  labs(y = expression(P[i]), x = "Genótipo",
+       title = "Top 15 - Índice Pi (Lin & Binns)")
+
+# -- Safety-First Index (Kataoka) --
+alpha <- 0.10
+SF <- apply(ge_table, 1, function(x) mean(x) - qnorm(1 - alpha) * sd(x))
+
+df_SF <- data.frame(gen = names(SF), SF = SF) |>
+  arrange(desc(SF)) |>
+  slice(1:15)
+
+ggplot(data = df_SF, aes(x = reorder(gen, -SF), y = SF)) +
+  geom_col(colour = "black", aes(fill = SF)) +
+  scale_fill_gradient(low = "#10342d", high = "#b2bc63") +
+  theme_classic(base_size = 13) +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+        legend.position = "none") +
+  labs(y = "Safety-First Index", x = "Genótipo",
+       title = "Top 15 - Safety-First (Kataoka)")
+
