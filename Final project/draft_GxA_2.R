@@ -415,6 +415,8 @@ modelos_aic <- data.frame(
     maxit = 100)
   aic5 <- summary(mod5)$aic
   
+  plot(mod5)
+  
   pred <- predict.asreml(object = mod5,classify = "gen:env",sed=TRUE)
   varcomp <- summary(mod5)$varcomp
   
@@ -472,6 +474,16 @@ modelos_aic <- data.frame(
   print(summary(mod5)$varcomp)
   varcomp <- summary(mod5)$varcomp
   
+  preds <- predict(mod5, classify = "env:gen", sed = TRUE, pworkspace = "8000mb")
+  
+  tabela_blups <- preds$pvals
+  
+  # Calcular a PEV (Prediction Error Variance)
+  tabela_blups$PEV <- tabela_blups$std.error^2
+  
+  print(summary(mod5)$varcomp)
+  varcomp <- summary(mod5)$varcomp
+  
   sigma2_G_valores <- c(
     "E0103" = varcomp[4,1],  
     "E0104" = varcomp[5,1],  
@@ -514,7 +526,7 @@ modelos_aic <- data.frame(
   resultado_final <- tabela_blups[, c("env", "gen", "predicted.value", "std.error", "Reliability")]
   head(resultado_final)
   
-  mod5_reliability <- readRDS("reability.rds")
+  mod5_reliability <- readRDS("reability2.rds")
   
   
   rel_gen <- mod5_reliability |>
