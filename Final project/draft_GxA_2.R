@@ -46,6 +46,38 @@ ggplot() +
   scale_colour_manual(values = c("firebrick","forestgreen")) +
   scale_fill_manual(values = c("firebrick","forestgreen"))
 
+####### ou
+index_trajetoria <- dat %>%
+  group_by(env, loc, YEAR, RAINFED) %>% 
+  summarise(GY_mean = mean(GY, na.rm = TRUE), .groups = "drop") %>%
+  mutate(index = GY_mean - mean(dat$GY, na.rm = TRUE)) %>%
+  group_by(loc) %>%
+  mutate(anos_totais = n_distinct(YEAR)) %>%
+  ungroup()
+
+ggplot(index_trajetoria, aes(x = factor(YEAR), y = index, group = loc)) +
+    geom_line(data = subset(index_trajetoria, anos_totais > 1), 
+            aes(colour = loc), linewidth = 1, alpha = 0.8) +
+  geom_hline(yintercept = 0, linetype = "dashed", linewidth = 0.8, colour = "grey40") +
+    geom_point(data = subset(index_trajetoria, anos_totais > 1),
+             aes(shape = as.factor(RAINFED)), colour = "black", size = 4, stroke = 1.2) +
+    geom_point(data = subset(index_trajetoria, anos_totais == 1),
+             aes(shape = as.factor(RAINFED)), colour = "firebrick", size = 4, stroke = 1.2) +
+  
+  # Cores para as linhas (Locais)
+  scale_colour_viridis_d(option = "turbo", name = "Código do Local") +
+    scale_shape_manual(values = c(16, 15, 8), name = "Regime Hídrico") + 
+  
+  labs(x = "Ano de Cultivo", 
+       y = "Índice Ambiental",
+       title = "Trajetória dos Locais e Impacto do Regime Hídrico",
+       subtitle = "") +
+  
+  theme_minimal(base_size = 14) +
+  theme(legend.position = "right",
+        panel.grid.minor = element_blank())
+
+
 # ------------------------------------------------------------------------------
 # 3. REGRESSÃO DE EBERHART-RUSSELL
 # ------------------------------------------------------------------------------
