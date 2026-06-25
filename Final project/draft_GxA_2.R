@@ -49,6 +49,10 @@ ggplot() +
   scale_fill_manual(values = c("firebrick","forestgreen"))
 
 ####### ou
+library(tidyverse)
+library(ggplot2)
+library(ggrepel)
+
 index_trajetoria <- dat %>%
   group_by(env, loc, YEAR, RAINFED) %>% 
   summarise(GY_mean = mean(GY, na.rm = TRUE), .groups = "drop") %>%
@@ -58,17 +62,22 @@ index_trajetoria <- dat %>%
   ungroup()
 
 ggplot(index_trajetoria, aes(x = factor(YEAR), y = index, group = loc)) +
-    geom_line(data = subset(index_trajetoria, anos_totais > 1), 
+  geom_line(data = subset(index_trajetoria, anos_totais > 1), 
             aes(colour = loc), linewidth = 1, alpha = 0.8) +
   geom_hline(yintercept = 0, linetype = "dashed", linewidth = 0.8, colour = "grey40") +
-    geom_point(data = subset(index_trajetoria, anos_totais > 1),
+  
+  geom_point(data = subset(index_trajetoria, anos_totais > 1),
              aes(shape = as.factor(RAINFED)), colour = "black", size = 4, stroke = 1.2) +
-    geom_point(data = subset(index_trajetoria, anos_totais == 1),
+  geom_point(data = subset(index_trajetoria, anos_totais == 1),
              aes(shape = as.factor(RAINFED)), colour = "firebrick", size = 4, stroke = 1.2) +
   
-  # Cores para as linhas (Locais)
+  ggrepel::geom_text_repel(aes(label = env), colour = "grey50", size = 3, 
+                           nudge_x = 0.2,       
+                           direction = "y",    
+                           segment.color = "grey80") + 
+  
   scale_colour_viridis_d(option = "turbo", name = "Código do Local") +
-    scale_shape_manual(values = c(16, 15, 8), name = "Regime Hídrico") + 
+  scale_shape_manual(values = c(16, 15, 8), name = "Regime Hídrico") + 
   
   labs(x = "Ano de Cultivo", 
        y = "Índice Ambiental",
@@ -78,6 +87,7 @@ ggplot(index_trajetoria, aes(x = factor(YEAR), y = index, group = loc)) +
   theme_minimal(base_size = 14) +
   theme(legend.position = "right",
         panel.grid.minor = element_blank())
+
 
 
 # ------------------------------------------------------------------------------
