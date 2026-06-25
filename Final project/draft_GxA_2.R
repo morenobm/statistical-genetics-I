@@ -119,38 +119,54 @@ ggplot(data = subset(ERm$GY$data, GEN %in% top_gen),
 # 4. DECOMPOSIÇÃO AMMI
 # ------------------------------------------------------------------------------
 
-media_geral <- mean(dat$GY, na.rm = TRUE)
-
-medias_env <- dat |>
-  group_by(env) |>
-  summarise(efeito_env = mean(GY, na.rm = TRUE) - media_geral, .groups = "drop")
-
-medias_gen <- dat |>
+# 1. Filtragem (Genótipos testados em pelo menos 6 ambientes)
+genos_completos <- dat |>
   group_by(gen) |>
-  summarise(efeito_gen = mean(GY, na.rm = TRUE) - media_geral, .groups = "drop")
+  summarise(n = n_distinct(env)) |>
+  filter(n >= 6) |>
+  pull(gen)
 
-dat_ammi_completo <- dat |>
-  tidyr::complete(env, gen, rep) |>
-  left_join(medias_env, by = "env") |>
-  left_join(medias_gen, by = "gen") |>
-  mutate(
-    # Se o GY for NA, preenche com o modelo aditivo; caso contrário, mantém o GY real
-    GY = ifelse(is.na(GY), media_geral + efeito_env + efeito_gen, GY)
-  ) |>
-  select(env, gen, rep, GY) # Manter apenas as colunas necessárias
+dat_ammi <- dat |>
+  filter(gen %in% genos_completos) |>
+  droplevels() |>
+  group_by(env) |>
+  filter(n_distinct(gen) >= 2) |>
+  ungroup() |>
+  droplevels()
 
+cat("Genótipos validados para AMMI:", nlevels(dat_ammi$gen), "\n")
+cat("Ambientes validados para AMMI:", nlevels(dat_ammi$env), "\n")
+
+# 2. Decomposição AMMI
 ammi <- metan::performs_ammi(
-  .data = dat_ammi_completo,
+  .data = dat_ammi,
   env   = "env",
   gen   = "gen",
   rep   = "rep",
   resp  = "GY"
 )
 
-ggarrange(plot_scores(ammi, type = 1), plot_scores(ammi, type = 2))
+p1 <- metan::plot_scores(ammi, 
+                         type = 1, 
+                         size.text.gen = 0,   
+                         col.gen = "grey60",  
+                         size.text.env = 3.5, 
+                         col.env = "#10342d", 
+                         title = FALSE) +     
+  labs(title = "A) AMMI 1: Produtividade vs. PC1") 
 
-plot(ammi, type = "AMMI1")
-plot(ammi, type = "AMMI2")
+p2 <- metan::plot_scores(ammi, 
+                         type = 2, 
+                         size.text.gen = 0, 
+                         col.gen = "grey60",
+                         size.text.env = 3.5,
+                         col.env = "firebrick", 
+                         title = FALSE) +       
+  labs(title = "B) AMMI 2: Interação Específica (PC1 vs PC2)") # Adiciona o título customizado
+
+painel_ammi <- p1 + p2
+print(painel_ammi)
+
 
 # ------------------------------------------------------------------------------
 # 5. MODELOS MISTOS
