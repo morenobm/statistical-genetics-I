@@ -2,6 +2,8 @@ library(asreml)
 library(tidyverse)
 library(ggpubr)
 library(metan)
+library(patchwork)
+
 
 # ------------------------------------------------------------------------------
 # 1. PREPARAÇÃO DOS DADOS
