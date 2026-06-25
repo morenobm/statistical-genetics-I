@@ -308,9 +308,7 @@ modelos_aic <- data.frame(
     scale_fill_gradient(low = "#10342d", high = "#b2bc63") +
     labs(x = "Ambiente", y = "Genótipo", fill = "GY",
          title = "Valores preditos — Genótipo × Ambiente")
-  
-  
-  
+
   # ------------------------------------------------------------------------------
   # 8. ÍNDICES DE ESTABILIDADE 
   # ------------------------------------------------------------------------------
@@ -497,3 +495,57 @@ modelos_aic <- data.frame(
     angle_col = 90,
     main = "Genotype connectivity based on shared environments"
   )
+
+  # ------------------------------------------------------------------------------
+  # 10. RELIABILITY DE CADA GENÓTIPO EM CADA ENV
+  # ------------------------------------------------------------------------------
+preds <- predict(mod5, classify = "env:gen", sed = TRUE, pworkspace = "8000mb")
+tabela_blups <- preds$pvals
+
+# Calcular a PEV (Prediction Error Variance)
+tabela_blups$PEV <- tabela_blups$std.error^2
+
+print(summary(mod5)$varcomp)
+varcomp <- summary(mod5)$varcomp
+
+sigma2_G_valores <- c(
+  "E0103" = varcomp[4,1],  
+  "E0104" = varcomp[5,1],  
+  "E0105" = varcomp[6,1],   
+  "E0106" = varcomp[7,1],
+  "E0107" = varcomp[8,1],
+  "E0169" = varcomp[9,1],
+  "E0170" = varcomp[10,1],
+  "E0171" = varcomp[11,1],
+  "E0172" = varcomp[12,1],
+  "E0173" = varcomp[13,1],
+  "E0174" = varcomp[14,1],
+  "E0176" = varcomp[15,1],
+  "E0224" = varcomp[16,1],
+  "E0225" = varcomp[17,1],
+  "E0226" = varcomp[18,1],
+  "E0227" = varcomp[19,1],
+  "E0228" = varcomp[20,1],
+  "E0229" = varcomp[21,1],
+  "E0230" = varcomp[22,1],
+  "E0252" = varcomp[23,1],
+  "E0253" = varcomp[24,1],
+  "E0254" = varcomp[25,1],
+  "E0255" = varcomp[26,1],
+  "E0278" = varcomp[27,1],
+  "E0279" = varcomp[28,1],
+  "E0280" = varcomp[29,1],
+  "E0281" = varcomp[30,1],
+  "E0282" = varcomp[31,1],
+  "E0283" = varcomp[32,1],
+  "E0284" = varcomp[33,1]
+)
+
+tabela_blups$sigma2_G <- sigma2_G_valores[tabela_blups$env]
+
+# Reliability = 1 - (PEV / Vgen)
+tabela_blups$Reliability <- 1 - (tabela_blups$PEV / tabela_blups$sigma2_G)
+
+# RESULTADO FINAL
+resultado_final <- tabela_blups[, c("env", "gen", "predicted.value", "std.error", "Reliability")]
+head(resultado_final)
