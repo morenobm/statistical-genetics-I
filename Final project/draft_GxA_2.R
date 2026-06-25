@@ -2,8 +2,6 @@ library(asreml)
 library(tidyverse)
 library(ggpubr)
 library(metan)
-library(patchwork)
-
 
 # ------------------------------------------------------------------------------
 # 1. PREPARAÇÃO DOS DADOS
@@ -16,8 +14,7 @@ dat <- read.csv(url_soja, sep = ';') |>
   mutate(
     env  = as.factor(env),
     gen  = as.factor(gen),
-    rep  = as.factor(rep)
-  ) |>
+    rep  = as.factor(rep)) |>
   filter(!is.na(GY))
 
 cat("Ambientes totais:", nlevels(dat$env), "\n")
@@ -47,48 +44,6 @@ ggplot() +
         axis.text.x = element_text(angle = 45, hjust = 1)) +
   scale_colour_manual(values = c("firebrick","forestgreen")) +
   scale_fill_manual(values = c("firebrick","forestgreen"))
-
-####### ou
-library(tidyverse)
-library(ggplot2)
-library(ggrepel)
-
-index_trajetoria <- dat %>%
-  group_by(env, loc, YEAR, RAINFED) %>% 
-  summarise(GY_mean = mean(GY, na.rm = TRUE), .groups = "drop") %>%
-  mutate(index = GY_mean - mean(dat$GY, na.rm = TRUE)) %>%
-  group_by(loc) %>%
-  mutate(anos_totais = n_distinct(YEAR)) %>%
-  ungroup()
-
-ggplot(index_trajetoria, aes(x = factor(YEAR), y = index, group = loc)) +
-  geom_line(data = subset(index_trajetoria, anos_totais > 1), 
-            aes(colour = loc), linewidth = 1, alpha = 0.8) +
-  geom_hline(yintercept = 0, linetype = "dashed", linewidth = 0.8, colour = "grey40") +
-  
-  geom_point(data = subset(index_trajetoria, anos_totais > 1),
-             aes(shape = as.factor(RAINFED)), colour = "black", size = 4, stroke = 1.2) +
-  geom_point(data = subset(index_trajetoria, anos_totais == 1),
-             aes(shape = as.factor(RAINFED)), colour = "firebrick", size = 4, stroke = 1.2) +
-  
-  ggrepel::geom_text_repel(aes(label = env), colour = "grey50", size = 3, 
-                           nudge_x = 0.2,       
-                           direction = "y",    
-                           segment.color = "grey80") + 
-  
-  scale_colour_viridis_d(option = "turbo", name = "Código do Local") +
-  scale_shape_manual(values = c(16, 15, 8), name = "Regime Hídrico") + 
-  
-  labs(x = "Ano de Cultivo", 
-       y = "Índice Ambiental",
-       title = "Trajetória dos Locais e Impacto do Regime Hídrico",
-       subtitle = "") +
-  
-  theme_minimal(base_size = 14) +
-  theme(legend.position = "right",
-        panel.grid.minor = element_blank())
-
-
 
 # ------------------------------------------------------------------------------
 # 3. REGRESSÃO DE EBERHART-RUSSELL
@@ -129,54 +84,38 @@ ggplot(data = subset(ERm$GY$data, GEN %in% top_gen),
 # 4. DECOMPOSIÇÃO AMMI
 # ------------------------------------------------------------------------------
 
-# 1. Filtragem (Genótipos testados em pelo menos 6 ambientes)
-genos_completos <- dat |>
-  group_by(gen) |>
-  summarise(n = n_distinct(env)) |>
-  filter(n >= 6) |>
-  pull(gen)
+media_geral <- mean(dat$GY, na.rm = TRUE)
 
-dat_ammi <- dat |>
-  filter(gen %in% genos_completos) |>
-  droplevels() |>
+medias_env <- dat |>
   group_by(env) |>
-  filter(n_distinct(gen) >= 2) |>
-  ungroup() |>
-  droplevels()
+  summarise(efeito_env = mean(GY, na.rm = TRUE) - media_geral, .groups = "drop")
 
-cat("Genótipos validados para AMMI:", nlevels(dat_ammi$gen), "\n")
-cat("Ambientes validados para AMMI:", nlevels(dat_ammi$env), "\n")
+medias_gen <- dat |>
+  group_by(gen) |>
+  summarise(efeito_gen = mean(GY, na.rm = TRUE) - media_geral, .groups = "drop")
 
-# 2. Decomposição AMMI
+dat_ammi_completo <- dat |>
+  tidyr::complete(env, gen, rep) |>
+  left_join(medias_env, by = "env") |>
+  left_join(medias_gen, by = "gen") |>
+  mutate(
+    # Se o GY for NA, preenche com o modelo aditivo; caso contrário, mantém o GY real
+    GY = ifelse(is.na(GY), media_geral + efeito_env + efeito_gen, GY)
+  ) |>
+  select(env, gen, rep, GY) # Manter apenas as colunas necessárias
+
 ammi <- metan::performs_ammi(
-  .data = dat_ammi,
+  .data = dat_ammi_completo,
   env   = "env",
   gen   = "gen",
   rep   = "rep",
   resp  = "GY"
 )
 
-p1 <- metan::plot_scores(ammi, 
-                         type = 1, 
-                         size.text.gen = 0,   
-                         col.gen = "grey60",  
-                         size.text.env = 3.5, 
-                         col.env = "#10342d", 
-                         title = FALSE) +     
-  labs(title = "A) AMMI 1: Produtividade vs. PC1") 
+ggarrange(plot_scores(ammi, type = 1), plot_scores(ammi, type = 2))
 
-p2 <- metan::plot_scores(ammi, 
-                         type = 2, 
-                         size.text.gen = 0, 
-                         col.gen = "grey60",
-                         size.text.env = 3.5,
-                         col.env = "firebrick", 
-                         title = FALSE) +       
-  labs(title = "B) AMMI 2: Interação Específica (PC1 vs PC2)") # Adiciona o título customizado
-
-painel_ammi <- p1 + p2
-print(painel_ammi)
-
+plot(ammi, type = "AMMI1")
+plot(ammi, type = "AMMI2")
 
 # ------------------------------------------------------------------------------
 # 5. MODELOS MISTOS
@@ -188,91 +127,7 @@ print(painel_ammi)
 # Matriz de covariâncias dos Resíduos
 #######################################
 
-## mod1: Matriz dos resíduos diagonal homogênea (Todos ambientes tem a mesma variância residual e não há correlação residual nem dentro e nem entre ambientes)
-mod1 <- asreml(
-  fixed    = GY ~ 1,
-  random   = ~ env + env:rep + gen + gen:env,
-  residual = ~ idv(units),
-  data     = dat,
-  maxit = 100)
-aic1 <- summary(mod1)$aic
 
-## mod2: Matriz dos resíduos bloco diagonal heterogênea (DIAG) (Cada ambiente possui sua própria variância residual e não há correlação residual nem dentro e nem entre ambientes)
-mod2 <- asreml(
-  fixed    = GY ~ 1,
-  random   = ~ env + env:rep + gen + gen:env,
-  residual = ~ dsum(~idv(units) | env),
-  data     = dat,
-  maxit = 100)
-aic2 <- summary(mod2)$aic
-
-## Melhor estrutura é a do mod2
-
-
-#######################################
-# Matriz de covariâncias dos blocos
-#######################################
-
-## mod3: Agora cada ambiente tem sua propria variancia do bloco (+32 parametros - não melhorou AIC)
-mod3 <- asreml(
-  fixed    = GY ~ 1,
-  random   = ~ env + at(env):rep + gen + gen:env,
-  residual = ~ dsum(~idv(units) | env),
-  data     = dat,
-  maxit = 100)
-aic3 <- summary(mod3)$aic
-
-## Melhor continuar com estrutura do mod2
-
-
-
-
-
-#######################################
-# Matriz de covariâncias GxE
-#######################################
-
-## mod4: Variância dos genótipos é diferente para cada ambiente (DIAG)
-mod4 <- asreml(
-  fixed    = GY ~ 1,
-  random   = ~ env + env:rep + diag(env):gen,
-  residual = ~ dsum(~idv(units) | env),
-  data     = dat,
-  maxit = 100)
-aic4 <- summary(mod4)$aic
-
-
-## mod5: Variância dos genótipos é diferente para cada ambiente e correlações entre efeitos dos genótipos nos diferentes ambientes é a mesma
-mod5 <- asreml(
-  fixed    = GY ~ 1,
-  random   = ~ env + env:rep + corh(env):gen,
-  residual = ~ dsum(~idv(units) | env),
-  data     = dat,
-  maxit = 100)
-aic5 <- summary(mod5)$aic
-
-
-## mod6: Variância e correlações entre os genótipos de cada ambiente sao diferentes 
-mod6 <- asreml(
-  fixed    = GY ~ 1,
-  random   = ~ env + env:rep + us(env):gen,
-  residual = ~ dsum(~idv(units) | env),
-  data     = dat,
-  maxit = 300)
-aic6 <- summary(mod6)$aic
-
-# nao convergiu
-
-## mod7: Variância e correlações entre os genótipos de cada ambiente sao diferentes 
-mod7 <- asreml(
-  fixed    = GY ~ 1,
-  random   = ~ env + env:rep + corgh(env):gen,
-  residual = ~ dsum(~idv(units) | env),
-  data     = dat,
-  maxit = 300)
-aic7 <- summary(mod7)$aic
-
-# nao convergiu
 
 
 
@@ -317,12 +172,9 @@ modelos_aic <- data.frame(
   # 7. PREDIÇÕES DO MELHOR MODELO 
   # ------------------------------------------------------------------------------
   
-  melhor_mod <- mod5 # o model 5 teve o melnor AIC
+  melhor_mod <- mod5 # o model 5 teve o menor AIC
   
-  pred <- predict.asreml(
-    object   = melhor_mod,
-    classify = "gen:env"
-  )$pvals
+  pred <- predict.asreml(object = melhor_mod,classify = "gen:env")$pvals
   
   pred |>
     ggplot(aes(x = reorder(env, -predicted.value),
@@ -336,7 +188,8 @@ modelos_aic <- data.frame(
     scale_fill_gradient(low = "#10342d", high = "#b2bc63") +
     labs(x = "Ambiente", y = "Genótipo", fill = "GY",
          title = "Valores preditos — Genótipo × Ambiente")
-
+  
+  
   # ------------------------------------------------------------------------------
   # 8. ÍNDICES DE ESTABILIDADE 
   # ------------------------------------------------------------------------------
@@ -381,6 +234,12 @@ modelos_aic <- data.frame(
          title = "Top 15 - Safety-First (Kataoka)")
   
   
+  # G342, G307, G310
+  
+  varcomp <- summary(mod5)$varcomp
+  
+  pred <- predict.asreml(object = melhor_mod,classify = "gen:env")$pvals
+  pred$reliability <- 1 - (pred$std.error^2/varcomp[1,1])
   
   
   ################
@@ -477,8 +336,7 @@ modelos_aic <- data.frame(
     fontsize_row = 10,
     fontsize_col = 10,
     angle_col = 90,
-    main = "Experiment connectivity based on shared genotypes"
-  )
+    main = "Experiment connectivity based on shared genotypes")
   
   ## Heatmap com os genótipos
   
@@ -521,59 +379,157 @@ modelos_aic <- data.frame(
     fontsize_row = 6,  
     fontsize_col = 6,
     angle_col = 90,
-    main = "Genotype connectivity based on shared environments"
-  )
-
+    main = "Genotype connectivity based on shared environments")
+  
+  
+  ###########################
+  # Genotypes
+  ##########################
+  g342 <- dat |> filter(gen == "G342") |> select (env) |> unique()
+  g307 <- dat |> filter(gen == "G307") |> select (env) |> unique()
+  g310 <- dat |> filter(gen == "G310") |> select (env) |> unique()
+  
+  
+  # Melhores sequeiro
+  top5 <- pred |>
+    filter(env %in% c("E0103","E0104","E0105","E0106","E0107","E0108",
+                      "E0169","E0170","E0171","E0172","E0173","E0174",
+                      "E0175","E0176")) |>
+    group_by(env) |>
+    arrange(desc(predicted.value), .by_group = TRUE) |>
+    slice_head(n = 5)
+  
+  # G342 - 13/14
+  # G307 - 7/14
+  # G310 - 4/14
+  
+  #############################
+  # Análise modelo 5
+  ############################
+  
+  mod5 <- asreml(
+    fixed    = GY ~ 1,
+    random   = ~ env + env:rep + corh(env):gen,
+    residual = ~ dsum(~idv(units) | env),
+    data     = dat,
+    maxit = 100)
+  aic5 <- summary(mod5)$aic
+  
+  pred <- predict.asreml(object = mod5,classify = "gen:env",sed=TRUE)
+  varcomp <- summary(mod5)$varcomp
+  
+  h2_mod5 <- 1-(mean(pred$sed[upper.tri(pred$sed)]^2)/(2*mean(varcomp[4:36,1])))
+  
+  
   # ------------------------------------------------------------------------------
   # 10. RELIABILITY DE CADA GENÓTIPO EM CADA ENV
   # ------------------------------------------------------------------------------
-preds <- predict(mod5, classify = "env:gen", sed = TRUE, pworkspace = "8000mb")
-tabela_blups <- preds$pvals
-
-# Calcular a PEV (Prediction Error Variance)
-tabela_blups$PEV <- tabela_blups$std.error^2
-
-print(summary(mod5)$varcomp)
-varcomp <- summary(mod5)$varcomp
-
-sigma2_G_valores <- c(
-  "E0103" = varcomp[4,1],  
-  "E0104" = varcomp[5,1],  
-  "E0105" = varcomp[6,1],   
-  "E0106" = varcomp[7,1],
-  "E0107" = varcomp[8,1],
-  "E0169" = varcomp[9,1],
-  "E0170" = varcomp[10,1],
-  "E0171" = varcomp[11,1],
-  "E0172" = varcomp[12,1],
-  "E0173" = varcomp[13,1],
-  "E0174" = varcomp[14,1],
-  "E0176" = varcomp[15,1],
-  "E0224" = varcomp[16,1],
-  "E0225" = varcomp[17,1],
-  "E0226" = varcomp[18,1],
-  "E0227" = varcomp[19,1],
-  "E0228" = varcomp[20,1],
-  "E0229" = varcomp[21,1],
-  "E0230" = varcomp[22,1],
-  "E0252" = varcomp[23,1],
-  "E0253" = varcomp[24,1],
-  "E0254" = varcomp[25,1],
-  "E0255" = varcomp[26,1],
-  "E0278" = varcomp[27,1],
-  "E0279" = varcomp[28,1],
-  "E0280" = varcomp[29,1],
-  "E0281" = varcomp[30,1],
-  "E0282" = varcomp[31,1],
-  "E0283" = varcomp[32,1],
-  "E0284" = varcomp[33,1]
-)
-
-tabela_blups$sigma2_G <- sigma2_G_valores[tabela_blups$env]
-
-# Reliability = 1 - (PEV / Vgen)
-tabela_blups$Reliability <- 1 - (tabela_blups$PEV / tabela_blups$sigma2_G)
-
-# RESULTADO FINAL
-resultado_final <- tabela_blups[, c("env", "gen", "predicted.value", "std.error", "Reliability")]
-head(resultado_final)
+  library(dplyr)
+  library(asreml)
+  
+  data <- read.csv(url_soja, sep = ';') |> 
+    filter(COUNTRY == "Zambia") |>
+    mutate(
+      env  = as.factor(env),
+      gen  = as.factor(gen),
+      rep  = as.factor(rep)) |>
+    filter(!is.na(GY))
+  
+  
+  ## Removing outliers
+  df <- data|> 
+    mutate (GY = case_when(
+      GY == 10650.85 ~ NA,
+      TRUE ~ GY
+    )) |> 
+    mutate(PH_R8 = case_when(
+      PH_R8 == 0 ~ NA,
+      PH_R8 == 0.0 ~ NA,
+      PH_R8 == 308.33 ~ NA,
+      TRUE ~ PH_R8
+    ))
+  
+  ## Converting columns
+  df$YEAR <- as.factor(df$YEAR)
+  df$loc <- as.factor(df$loc)
+  df$env <- as.factor(df$env)
+  df$check <- as.factor(df$check)
+  df$rep <- as.factor(df$rep)
+  df$gen <- as.factor(df$gen)
+  df$RAINFED <- as.factor(df$RAINFED)
+  
+  df_filter <- df |> filter(!(env %in% c("E0108", "E0175", "E0285")))
+  
+  # Model 5
+  mod5 <- asreml(
+    fixed    = GY ~ 1,
+    random   = ~ env + env:rep + corh(env):gen,
+    residual = ~ dsum(~idv(units) | env),
+    data     = df_filter,
+    maxit = 100)
+  aic5 <- summary(mod5)$aic ; aic5
+  
+  print(summary(mod5)$varcomp)
+  varcomp <- summary(mod5)$varcomp
+  
+  sigma2_G_valores <- c(
+    "E0103" = varcomp[4,1],  
+    "E0104" = varcomp[5,1],  
+    "E0105" = varcomp[6,1],   
+    "E0106" = varcomp[7,1],
+    "E0107" = varcomp[8,1],
+    "E0169" = varcomp[9,1],
+    "E0170" = varcomp[10,1],
+    "E0171" = varcomp[11,1],
+    "E0172" = varcomp[12,1],
+    "E0173" = varcomp[13,1],
+    "E0174" = varcomp[14,1],
+    "E0176" = varcomp[15,1],
+    "E0224" = varcomp[16,1],
+    "E0225" = varcomp[17,1],
+    "E0226" = varcomp[18,1],
+    "E0227" = varcomp[19,1],
+    "E0228" = varcomp[20,1],
+    "E0229" = varcomp[21,1],
+    "E0230" = varcomp[22,1],
+    "E0252" = varcomp[23,1],
+    "E0253" = varcomp[24,1],
+    "E0254" = varcomp[25,1],
+    "E0255" = varcomp[26,1],
+    "E0278" = varcomp[27,1],
+    "E0279" = varcomp[28,1],
+    "E0280" = varcomp[29,1],
+    "E0281" = varcomp[30,1],
+    "E0282" = varcomp[31,1],
+    "E0283" = varcomp[32,1],
+    "E0284" = varcomp[33,1]
+  )
+  
+  tabela_blups$sigma2_G <- sigma2_G_valores[tabela_blups$env]
+  
+  # Reliability = 1 - (PEV / Vgen)
+  tabela_blups$Reliability <- 1 - (tabela_blups$PEV / tabela_blups$sigma2_G)
+  
+  # RESULTADO FINAL
+  resultado_final <- tabela_blups[, c("env", "gen", "predicted.value", "std.error", "Reliability")]
+  head(resultado_final)
+  
+  mod5_reliability <- readRDS("reability.rds")
+  
+  
+  rel_gen <- mod5_reliability |>
+    group_by(gen) |>
+    summarise(
+      mean_reliability = mean(Reliability, na.rm = TRUE),
+      n_env = n(),
+      .groups = "drop"
+    )
+  
+  rel_env <- mod5_reliability |>
+    group_by(env) |>
+    summarise(
+      mean_reliability = mean(Reliability, na.rm = TRUE),
+      n_gen = n(),
+      .groups = "drop"
+    )
+  
