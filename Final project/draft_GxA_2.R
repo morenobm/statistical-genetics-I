@@ -24,31 +24,61 @@ cat("Genótipos totais:", nlevels(dat$gen), "\n")
 # 2. ÍNDICE AMBIENTAL (Finlay-Wilkinson)
 # ------------------------------------------------------------------------------
 
-index <- data.frame(
-  index = tapply(dat$GY, dat$env, mean) - mean(dat$GY)
-) |> rownames_to_column("env")
+```{r}
+#| label: fig-trajectory
+#| fig-cap: "Environmental Index trajectory of the evaluated locations across years"
+#| warning: false
+#| message: false
 
-dat_grafico_amb <- merge(dat, index, by = "env")
+library(tidyverse)
+library(ggplot2)
+library(ggrepel)
 
-ggplot() +
-  geom_point(data = subset(index, index < 0),
-             aes(x = env, y = index, colour = "Desfavorável", fill = "Desfavorável"),
-             size = 2.5, shape = 25) +
-  geom_point(data = subset(index, index > 0),
-             aes(x = env, y = index, colour = "Favorável", fill = "Favorável"),
-             size = 2.5, shape = 24) +
-  geom_hline(aes(yintercept = 0), linetype = "dashed", linewidth = 1.2) +
-  labs(y = "Índice Ambiental", x = "Ambiente", colour = "", fill = "") +
-  theme_bw(base_size = 14) +
-  theme(legend.position = "top",
-        axis.text.x = element_text(angle = 45, hjust = 1)) +
-  scale_colour_manual(values = c("firebrick","forestgreen")) +
-  scale_fill_manual(values = c("firebrick","forestgreen"))
+trajectory_index <- dat %>%
+  group_by(env, loc, YEAR, RAINFED) %>% 
+  summarise(GY_mean = mean(GY, na.rm = TRUE), .groups = "drop") %>%
+  mutate(index = GY_mean - mean(dat$GY, na.rm = TRUE)) %>%
+  group_by(loc) %>%
+  mutate(total_years = n_distinct(YEAR)) %>%
+  ungroup()
 
+ggplot(trajectory_index, aes(x = factor(YEAR), y = index, group = loc)) +
+  geom_line(data = subset(trajectory_index, total_years > 1), 
+            aes(colour = loc), linewidth = 1, alpha = 0.8) +
+  geom_hline(yintercept = 0, linetype = "dashed", linewidth = 0.8, colour = "grey40") +
+  
+  geom_point(data = subset(trajectory_index, total_years > 1),
+             aes(shape = as.factor(RAINFED)), colour = "black", size = 4, stroke = 1.2) +
+  geom_point(data = subset(trajectory_index, total_years == 1),
+             aes(shape = as.factor(RAINFED)), colour = "firebrick", size = 4, stroke = 1.2) +
+  
+  ggrepel::geom_text_repel(aes(label = env), colour = "grey50", size = 3, 
+                           nudge_x = 0.2,       
+                           direction = "y",    
+                           segment.color = "grey80") + 
+  
+  scale_colour_viridis_d(option = "turbo", name = "Location Code") +
+  scale_shape_manual(values = c(16, 15, 8), name = "Water Regime") + 
+  
+  labs(x = "Year", 
+       y = "Environmental Index",
+       title = "Location Trajectory and Water Regime Impact",
+       subtitle = "") +
+  
+  theme_minimal(base_size = 14) +
+  theme(legend.position = "right",
+        panel.grid.minor = element_blank())
+
+```
 # ------------------------------------------------------------------------------
 # 3. REGRESSÃO DE EBERHART-RUSSELL
 # ------------------------------------------------------------------------------
 
+```{r}
+#| label: fig-eberhart-russell
+#| fig-cap: "Eberhart and Russell (1966) regression analysis"
+#| 
+# 1. Run the Eberhart-Russell model
 ERm <- metan::ge_reg(
   .data   = dat,          
   env     = "env",
@@ -58,15 +88,17 @@ ERm <- metan::ge_reg(
   verbose = FALSE
 )
 
-# Selecionar os genótipos com maior média geral (b0)
+# 2. Select the top 30 genotypes with the highest overall mean (b0)
 top_gen <- ERm$GY$regression |>
   arrange(desc(b0)) |>
-  slice(1:30) |> #dá para mudar os 30
+  slice(1:30) |> 
   pull(GEN) |>
   as.character()
 
-#mantém os genótipos mesmo que ná esteja em todos os ambientes?
+# 3. Force genotype G318 into the plot (if not already in the top 30)
+top_gen <- unique(c(top_gen, "G318"))
 
+# 4. Plot the regression lines
 ggplot(data = subset(ERm$GY$data, GEN %in% top_gen),
        aes(x = IndAmb, y = Y)) +
   facet_wrap(. ~ GEN) +
@@ -74,9 +106,12 @@ ggplot(data = subset(ERm$GY$data, GEN %in% top_gen),
   geom_point(aes(colour = ENV), size = 2) +
   theme_bw(base_size = 14) +
   geom_vline(xintercept = 0, linetype = "dotted") +
-  labs(x = "Índice Ambiental", y = "Produtividade (GY)", colour = "Ambiente") +
+  labs(x = "Environmental Index", 
+       y = "Grain Yield (GY)", 
+       colour = "Environment") +
   scale_color_viridis_d(option = "turbo") +
   stat_regline_equation()
+```
 
 
 
@@ -84,38 +119,41 @@ ggplot(data = subset(ERm$GY$data, GEN %in% top_gen),
 # 4. DECOMPOSIÇÃO AMMI
 # ------------------------------------------------------------------------------
 
-media_geral <- mean(dat$GY, na.rm = TRUE)
+library(tidyverse)
+library(metan)
+library(patchwork)
 
-medias_env <- dat |>
-  group_by(env) |>
-  summarise(efeito_env = mean(GY, na.rm = TRUE) - media_geral, .groups = "drop")
-
-medias_gen <- dat |>
-  group_by(gen) |>
-  summarise(efeito_gen = mean(GY, na.rm = TRUE) - media_geral, .groups = "drop")
-
-dat_ammi_completo <- dat |>
-  tidyr::complete(env, gen, rep) |>
-  left_join(medias_env, by = "env") |>
-  left_join(medias_gen, by = "gen") |>
-  mutate(
-    # Se o GY for NA, preenche com o modelo aditivo; caso contrário, mantém o GY real
-    GY = ifelse(is.na(GY), media_geral + efeito_env + efeito_gen, GY)
-  ) |>
-  select(env, gen, rep, GY) # Manter apenas as colunas necessárias
-
-ammi <- metan::performs_ammi(
-  .data = dat_ammi_completo,
+ammi_bruto <- metan::performs_ammi(
+  .data = dat,
   env   = "env",
   gen   = "gen",
   rep   = "rep",
   resp  = "GY"
 )
 
-ggarrange(plot_scores(ammi, type = 1), plot_scores(ammi, type = 2))
+p1_bruto <- metan::plot_scores(ammi_bruto, 
+                               type = 1, 
+                               size.text.gen = 0,   
+                               col.gen = "grey60",  
+                               size.text.env = 3.5, 
+                               col.env = "#10342d",
+                               title = FALSE) +     
+  labs(title = "A) AMMI 1: Prod. vs. PC1")
 
-plot(ammi, type = "AMMI1")
-plot(ammi, type = "AMMI2")
+p2_bruto <- metan::plot_scores(ammi_bruto, 
+                               type = 2, 
+                               size.text.gen = 0, 
+                               col.gen = "grey60",
+                               size.text.env = 3.5,
+                               col.env = "firebrick",
+                               title = FALSE) +       
+  labs(title = "B) AMMI 2: PC1 vs PC2")
+
+# 4. Juntar os gráficos lado a lado
+painel_ammi_bruto <- p1_bruto + p2_bruto
+
+# Mostrar o gráfico final no ecrã
+print(painel_ammi_bruto)
 
 # ------------------------------------------------------------------------------
 # 5. MODELOS MISTOS
