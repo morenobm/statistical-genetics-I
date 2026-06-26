@@ -1,0 +1,686 @@
+---
+title: "Preview Final Project"
+author: 
+  - name: Bruna Moreno, Daniele Bononi, João Vitor Calvo, Renan Fantine
+    affiliation:
+      - name: Department of Genetics, ESALQ-USP
+        city: Piracicaba, São Paulo, Brazil
+format: 
+  html:
+    toc: true
+    toc-location: left
+    code-overflow: wrap
+    code-fold: true
+    fig-align: center
+    fig-width: 10
+    theme: 
+      light: journal
+      dark: darkly
+    embed-resources: true
+crossref: {}
+editor: 
+  markdown: 
+    wrap: 72
+---
+
+# Exercise
+
+Using provided datasets, you are expected to analyse the data and
+interpret the results by applying the concepts and methodologies covered
+throughout the course.
+
+Please develop a report using R Markdown or Quarto. The final document
+must include the following sections:
+
+Introduction: A brief overview of the research problem. Materials and
+Methods: A detailed description of the statistical approach. Results: A
+clear presentation of the findings (with Figures and Tables).
+Discussion: A concise interpretation of the results in the context of
+the study.
+
+# Introduction
+
+This report provides a data analysis of a multi-environment soybean
+breeding in Zambia dataset, focusing on two agronomic traits **Grain
+Yield** and **Plant Height**. The experimental design of the 33 trials
+in Zambia dataset is Randomized Complete Block Design (RCBD), in which
+all trials are located in different environment, being the **environment
+a combination of year x local**.
+
+```{r}
+#| label: setup
+#| include: false
+
+knitr::opts_chunk$set(
+  fig.show = "hold",
+  warning = FALSE,
+  message = FALSE,
+  results = "hold")
+```
+
+```{r}
+#| label: trials-data
+
+# Loading packages
+packages <- c("ggplot2", "patchwork", "tidyr", "dplyr", "purrr", "knitr", "kableExtra", "grid","ggcorrplot", "asreml","gt")
+invisible(lapply(packages, function(p){
+  suppressMessages(suppressPackageStartupMessages(
+  suppressWarnings(library(p, character.only = TRUE))))}))
+
+# Loading phenotypic data (Zambia)
+data = read.csv("https://raw.githubusercontent.com/mauricioaraujj/Pan_African_Trials_Network/refs/heads/main/data/data.csv", sep = ';') |> filter(COUNTRY == "Zambia")
+```
+
+```{r}
+#| label: env-year-table
+#| tbl-cap: "Environment distribution"
+
+env_year_table <- data |>
+  distinct(loc, YEAR, env) |>
+  pivot_wider(
+    names_from = YEAR,
+    values_from = env,
+    values_fn = list(env = paste),
+    values_fill = "-"
+  )
+
+env_year_table |>
+  gt(rowname_col = "loc") |>
+  tab_header(
+    title = "Environment distribution"
+  ) |>
+  cols_align(
+    align = "center",
+    columns = everything()
+  ) |>
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_column_labels()
+  ) |>
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_stub()
+  ) |>
+  tab_options(
+    table.width = pct(100),
+    table.font.size = 12
+  )
+```
+
+# Outliers Removal
+
+First, we performed some analysis to remove outlier data that are not
+agronomically consistent, and we standardized the codification of
+missing information to NA.
+
+```{r}
+#| label: outliers_GY
+
+# Normal Distribution Sd's
+ggplot(data, aes(x = GY)) +
+  geom_histogram(bins = 100, fill = "steelblue", alpha = 0.7) +
+  geom_vline(xintercept = mean(data$GY, na.rm = TRUE), 
+             color = "red", linetype = "dashed", size = 1) +
+  geom_vline(xintercept = mean(data$GY, na.rm = TRUE) + 
+               c(-3, 3) * sd(data$GY, na.rm = TRUE), 
+             color = "orange", linetype = "dotted", size = 1) +
+  labs(title = "Histogram with outlier limits (±3σ)",
+       x = "Value", y = "Frequency") +
+  theme_minimal()
+
+# Boxplot outliers
+p_hist <- ggplot(data, aes(x = GY)) +
+  geom_histogram(bins = 100, fill = "steelblue", alpha = 0.7) +
+  theme_minimal() +
+  theme(axis.title.x = element_blank())
+
+p_box <- ggplot(data, aes(y = GY, x = "")) +
+  geom_boxplot(fill = "steelblue", alpha = 0.7, outlier.color = "red", 
+               outlier.size = 2, outlier.alpha = 0.5) +
+  coord_flip() +
+  theme_minimal() +
+  theme(axis.title.y = element_blank(),
+        axis.text.y = element_blank())
+
+p_hist / p_box + plot_layout(heights = c(3, 1))
+
+## Removing outliers
+df <- data|> 
+  mutate (GY = case_when(
+    GY == 10650.85 ~ NA,
+    TRUE ~ GY
+  )) |> 
+  mutate(PH_R8 = case_when(
+    PH_R8 == 0 ~ NA,
+    PH_R8 == 0.0 ~ NA,
+    PH_R8 == 308.33 ~ NA,
+    TRUE ~ PH_R8
+  ))
+
+## Converting columns
+df$YEAR <- as.factor(df$YEAR)
+df$loc <- as.factor(df$loc)
+df$env <- as.factor(df$env)
+df$check <- as.factor(df$check)
+df$rep <- as.factor(df$rep)
+df$gen <- as.factor(df$gen)
+df$RAINFED <- as.factor(df$RAINFED)
+```
+
+# Single Trial - Statistical Model
+
+Then, each trial was analysed separately, to have a better understanding
+of the aspects related to the quality of the data collected in each
+trial. This was done by analysing the broad-sense heritability ($H^{2}$)
+and the coefficient of variation ($CV%$).
+
+Within each trial (RCBD) there are 3 blocks and approximately 30
+genotypes, and for both traits analysed, the statistical model used is
+describe as follow:
+
+$$y_{ij}=\mu +b_{j}+g_{i}+e_{ij}$$
+
+Where:
+
+$b_{j}$ is the block fixed effects, as there are only 3 blocks within
+each experiment.
+
+$g_{i}$ is the genotype's random effects, where
+$g_i \sim N(0, \sigma^2_g)$. This was decided due to the unbalanced
+nature of the data, as some trials had missing plots.
+
+$e_{ij}$ is the residual random effect, where $e_{ij} \sim N(0, \sigma^2_e)$. That is, assuming indepedence of residuals within trials
+
+As most trials are completely balanced, the broad-sense heritability was estimated as: 
+
+- individual/plot level: $H² = \frac{\sigma²_g}{ \sigma²_g + \sigma²_e}$, 
+- genotype level: $H² = \frac{\sigma²_g}{ \sigma²_g + \frac{\sigma^2_e}{3}}$ 
+- Cullis, 2006:  $ H^2 =  1 - \frac{\bar{SED^2}}{2\sigma²_g}$
+
+# Trait 1 - GY
+
+```{r}
+#| label: GY_missing_data
+
+# Lista de ambientes
+envs_list <- unique(as.character(df$env))
+
+# Verificando dados faltantes para GY em cada ENV
+info_env_GH <- df |>
+  group_by(env) |>
+  summarise(
+    obs = n(),
+    NAs = sum(is.na(GY)),
+    .groups = "drop")
+```
+
+```{r}
+#| label: GY_analysis
+#| output: false
+
+# Rodando para cada trial isoladamente
+singleTrial_models_GY <- list()
+singleTrial_varcomp_GY <- list()
+singleTrial_blup_GY <- list()
+singleTrial_reliability_GY <- list()
+tabela_geral_GY <- data.frame(env = character(),LRTstat = numeric(),pvalue = numeric(),significance = logical(), h2_plot = numeric(),h2_gen = numeric(), h2_cullis = numeric(), cv = numeric(), stringsAsFactors = FALSE)
+
+for (i in envs_list){
+  
+  df_env <- df |> filter(env == i)
+  df_env$gen <- as.factor(df_env$gen)
+  df_env$rep <- as.factor(df_env$rep)
+  i <- as.character(i)
+  
+  model <- asreml(fixed = GY ~ rep,
+                               random = ~ gen ,
+                               data = df_env,
+                               maxit = 100,
+                               na.action = na.method(y=c("omit")))
+
+  varcomp <- summary(model)$varcomp
+  
+  blups <- predict.asreml(model, classify = "gen", sed = TRUE)
+  
+  pred_BLUP <- blups$pvals |> 
+    dplyr::select(predicted.value, dplyr::everything()) |> 
+    dplyr::arrange(desc(predicted.value))
+  
+  m_red_GY <- asreml(fixed = GY ~ rep,
+                               data = df_env,
+                               maxit = 100,
+                               na.action = na.method(y=c("omit")))
+  
+  pval <- lrt(model, m_red_GY, boundary = T)  
+  
+  h2_plot <- vpredict(model, H2 ~ V1/(V1+V2)) # nível de parcela
+  h2_gen <- varcomp[1,1] / (varcomp[1,1]+(varcomp[2,1]/3)) # ind
+  h2_cullis <- 1-(mean(blups$sed[upper.tri(blups$sed)]^2)/(2*varcomp[1,1]))
+  
+  cv <- sqrt(varcomp[2,1])/mean(df_env$GY, na.rm=T)
+  
+  reliability <- 1 - (pred_BLUP$std.error^2/varcomp[1,1])
+  
+  tabela_geral_GY <- rbind(tabela_geral_GY,
+    data.frame(
+      env = i,
+      LRTstat = round(pval$`LR-statistic`,digits=3),
+      pvalue = round(pval$`Pr(Chisq)`,digits=4) ,
+      significance = pval$`Pr(Chisq)` < 0.05,
+      h2_plot = round(h2_plot$Estimate,digits=4),
+      h2_gen = round(h2_gen,digits = 4),
+      h2_cullis = round(h2_cullis,digits = 4),
+      cv = round((cv*100),digits=2)))
+  
+  singleTrial_models_GY[[i]] <- model
+  singleTrial_varcomp_GY[[i]] <- varcomp
+  singleTrial_blup_GY[[i]] <- blups$pvals
+  singleTrial_reliability_GY[[i]] <- reliability
+  }
+```
+
+```{r}
+
+tabela_geral_GY |>
+  mutate(
+    highlight = env %in% c("E0108", "E0175", "E0285")) |> 
+  gt(rowname_col = "env") |>
+  tab_header(
+    title = "Single-trial analysis for grain yield"
+  ) |>
+  tab_style(
+    style = cell_fill(color = "#e8f5e9"),
+    locations = cells_body(
+      rows = highlight == TRUE
+    )
+  ) |>
+  cols_hide(
+    columns = c(significance, highlight)
+  ) |>
+  cols_label(
+    LRTstat = "LRT",
+    pvalue = "P-value",
+    h2_plot = html("H<sup>2</sup><sub>plot</sub>"),
+    h2_gen = html("H<sup>2</sup><sub>genotype</sub>"),
+    h2_cullis = html("H<sup>2</sup><sub>Cullis</sub>"),
+    cv = "CV (%)"
+  ) |>
+  fmt_number(
+    columns = c(LRTstat, pvalue, h2_plot, h2_gen, h2_cullis, cv),
+    decimals = 4
+  ) |>
+  cols_align(
+    align = "center",
+    columns = everything()
+  ) |>
+  tab_options(
+    table.font.size = px(12),
+    table.width = pct(100)
+  )
+
+```
+
+Com base nas herdabilidades observadas na tabela acima, nota-se que as observações dos ambientes "E0108", "E0175" e "E0285" tem uma herdabildiade nula ou muito pequena. Isso mostra que somente uma pequena parte da variação das observações desses experimentos são causadas por fatores genético, e grande parte é causada pelo efeito do ambiente e fatores não controlados. 
+
+Analisar se o modelo fica melhor removendo esses ambientes ou não
+
+```{r}
+# Removing envs "E0108", "E0175" e "E0285"
+df_filter <- df |> filter(!(env %in% c("E0108", "E0175", "E0285")))
+
+# New table
+env_year_table <- df_filter |>
+  distinct(loc, YEAR, env) |>
+  pivot_wider(
+    names_from = YEAR,
+    values_from = env,
+    values_fn = list(env = paste),
+    values_fill = "-"
+  )
+
+env_year_table |>
+  gt(rowname_col = "loc") |>
+  tab_header(
+    title = "Environment distribution"
+  ) |>
+  cols_align(
+    align = "center",
+    columns = everything()
+  ) |>
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_column_labels()
+  ) |>
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_stub()
+  ) |>
+  tab_options(
+    table.width = pct(100),
+    table.font.size = 12
+  )
+```
+
+```{r}
+#| label: fig-blup_by_envs_plots_GY
+
+blup_all_GY <- bind_rows(
+  lapply(names(singleTrial_blup_GY), function(env){
+    df <- singleTrial_blup_GY[[env]]
+    df$env <- env
+    return(df)}))
+
+ggplot(blup_all_GY,
+       aes(x = env, y = predicted.value, group = gen, color = gen)) +
+      geom_line(alpha = 0.3) +
+      geom_point(size = 1) +
+      theme_minimal() +
+      labs(x = "Environment", y = "Predicted BLUP (GY)",
+        title = "2019 - 2023 Genotype's Predicted Values Across Diferent Environments") +
+      theme(axis.text.x = element_text(angle = 45, hjust = 1),legend.position = "none")
+```
+
+
+
+The fluctuation in the top-ranking positions highlights the presence of a strong Genotype by Environment (GxE) interaction (cross-over patterns) @fig-blup_by_envs_plots_GY
+
+Devido à interação, analisaremos todos os ambientes juntos (estabilidade e GxE)
+
+# Multi trial - Statistical Model
+
+# Conectividade de genótipos entre os ambientes
+
+
+
+```{r}
+#| label: gen_connectivity
+
+# 
+table_connect <- table(as.character(df_filter$env), as.character(df_filter$gen))
+  
+# Convert to presence/absence
+table_connect[table_connect > 0] <- 1
+table_connect <- as.data.frame(table_connect)
+  
+# Percentage of experiments in which each treatment is present
+conect_perc <- tapply(table_connect$Freq, table_connect$Var2, sum) /length(unique(df_filter$env)) * 100
+  
+conect_perc <- data.frame(Genótipo = names(conect_perc),
+                          Conectividade = conect_perc)
+
+table_connect
+
+conect_perc <- conect_perc[order(conect_perc$Conectividade, decreasing = TRUE),]
+
+kable(conect_perc, caption = "Connectivity of genotypes across experiments",
+align = "c")
+
+#Presence 
+pres <- mean(table_connect$Freq) * 100
+
+#Absence
+abs <- 100 - pres
+
+  
+  table_connect$Var2 <- factor(as.character(table_connect$Var2), levels = conect_perc$Genótipo)
+  ordem_env <- names(sort(tapply(table_connect$Freq, table_connect$Var1, sum), decreasing = TRUE))
+  table_connect$Var1 <- factor(as.character(table_connect$Var1), levels = ordem_env)
+  
+  ggplot(table_connect, aes(x = Var2, y = Var1, fill = factor(Freq))) +
+    geom_tile() +
+    scale_fill_manual(
+      values = c("white", "#A7C7E7"),
+      labels = c("Absence", "Presence")
+    ) +
+    labs(
+      title = "Presence–absence of treatments across experiments",
+      x = "Genotypes (Sorted by Connectivity)",
+      y = "Environments",
+      fill = "Presence"
+    ) +
+    theme_minimal() + 
+    theme(
+      axis.text.x = element_blank(),
+      axis.ticks.x = element_blank(),
+      panel.grid = element_blank() 
+    )
+  
+  # Matrix
+  M <- xtabs(Freq ~ Var1 + Var2, data = table_connect)
+  
+  # Shared treatments
+  shared <- M %*% t(M)
+  
+  # Number of treatments per experiment
+  n_trat <- rowSums(M)
+  
+  # Jaccard
+  jaccard <- shared
+  
+  for(i in rownames(shared)) {
+    for(j in colnames(shared)) {
+      jaccard[i, j] <- shared[i, j] / (n_trat[i] + n_trat[j] - shared[i, j])
+    }
+  }
+  
+  diag(jaccard) <- 1
+  
+  pheatmap(
+    jaccard,
+    cluster_rows = TRUE,
+    cluster_cols = TRUE,
+    clustering_method = "average",
+    color = rev(hcl.colors(100, "Blues")),
+    fontsize_row = 10,
+    fontsize_col = 10,
+    angle_col = 90,
+    main = "Experiment connectivity based on shared genotypes"
+  )
+  
+  ## Heatmap com os genótipos
+  
+  # 1. Matriz de contingência original (Linhas = Ambientes, Colunas = Genótipos)
+  M <- xtabs(Freq ~ Var1 + Var2, data = table_connect)
+  
+  # 2. Shared environments per genotype (INVERTIDO: t(M) %*% M gera Genótipo x Genótipo)
+  shared_gen <- t(M) %*% M
+  
+  # 3. Número de ambientes em que cada genótipo está presente (Agora sim usamos colSums)
+  n_env_per_gen <- colSums(M)
+  
+  # 4. Inicializa a matriz de Jaccard para os Genótipos
+  jaccard_gen <- shared_gen
+  
+  # 5. Loop do Jaccard adaptado para os genótipos (com proteção contra divisões por zero)
+  for(i in rownames(shared_gen)) {
+    for(j in colnames(shared_gen)) {
+      denominador <- n_env_per_gen[i] + n_env_per_gen[j] - shared_gen[i, j]
+      
+      if (denominador == 0) {
+        jaccard_gen[i, j] <- 0
+      } else {
+        jaccard_gen[i, j] <- shared_gen[i, j] / denominador
+      }
+    }
+  }
+  
+  # Garante a diagonal unitária (similaridade de um genótipo com ele mesmo é 1)
+  diag(jaccard_gen) <- 1
+  
+  # 6. Plot do Heatmap dos Genótipos
+  library(pheatmap)
+  pheatmap(
+    jaccard_gen,
+    cluster_rows = TRUE,
+    cluster_cols = TRUE,
+    clustering_method = "average",
+    color = rev(hcl.colors(100, "Blues")),
+    fontsize_row = 6,  
+    fontsize_col = 6,
+    angle_col = 90,
+    main = "Genotype connectivity based on shared environments"
+  )
+  
+```
+
+Para analisar o desempenho dos genótipos nos diferentes locais conjuntamente, será também utilizado modelos mistos, que é mais apropriado para o desbalanceamento de dados.
+
+Our inicial model is:
+
+**REVER MODELO (GxE)**
+
+$$y_{ijk}=l_{i} +b_{j}+g_{k}+e_{ijk}$$
+
+Where:
+
+$l_{i}$ is the environment random effects, as the environments (local x year combinations) can be treated as a random sample of all possible combinations of these factors
+
+$b_{j}$ is the block random effects, as they are nested in environments $b \sim N(0,\sigma^2_bB)$
+
+$g_{k}$ is the genotype's random effects, where $g \sim N(0,\sigma^2_gG)$
+
+$e_{ijk}$ is the residual random effect $e \sim N(0,\sigma^2_eR)$
+
+Different (co)variances structures will be tested for the random effects in these models. Each one of the models make different assumptions regarding the residuals, block or genetic random distribution. First, we will analyse the residuals covariance matrix, then blocks and genetics.
+
+- Model 1: G - compound symmetry (genetic variance is homogeneous for genotypes in different environments and the covariance between the same genotypes performance in any two environments is constant)
+           R - identity (all residuals have the same variance in different environments)
+           B - identity (blocks in different environment have the same variance)
+            
+```{r}
+# Model 1
+mod1 <- asreml(
+  fixed    = GY ~ 1,
+  random   = ~ env + env:rep + gen + gen:env,
+  residual = ~ idv(units),
+  data     = df_filter,
+  maxit = 100)
+aic1 <- summary(mod1)$aic ; aic1
+
+```
+
+- Model 2: G - compound symmetry (all genotypes have the same variances and the same covariances in different environments)
+           R - block-diagonal (each environment has its own residual variance)
+           B - identity (blocks in different environment have the same variance)
+           
+The assumption regarding R now seems to be more reasonable, as different environments impacts differently on the residuals. By analysing the AIC value, we observe that the model fitted better, compensating the parameters that were added.
+
+```{r}
+# Model 2
+mod2 <- asreml(
+  fixed    = GY ~ 1,
+  random   = ~ env + env:rep + gen + gen:env,
+  residual = ~ dsum(~idv(units) | env),
+  data     = df_filter,
+  maxit = 100)
+aic2 <- summary(mod2)$aic; aic2
+```
+
+As in this trial there is no information about the position of the plots in the field, we are not capable of doing the classical spatial corrections, so these will be the structure adopted to the covariance matrix R. Now, we will analyse the block covariance matrix:
+
+- Model 3: G - compound symmetry (all genotypes have the same variances and the same covariances in different environments)
+           R - block-diagonal (each environment has its own residual variance)
+           B - block-diagonal (each environment has its own block variance)
+
+```{r}
+# Model 3
+mod3 <- asreml(
+  fixed    = GY ~ 1,
+  random   = ~ env + at(env):rep + gen + gen:env,
+  residual = ~ dsum(~idv(units) | env),
+  data     = df_filter,
+  maxit = 100)
+aic3 <- summary(mod3)$aic; aic3
+```
+
+Based on the AIC value, the third model did not fitted better than the second one. This occurred probably because in each environment, there are only 3 blocks to estimate the variance component. Based on that, we will assume that the previous structure for covariance matrix B (identity - Model 2) is better. Now, the genetic part will be analysed.
+
+- Model 4: G - block-diagonal (each environment has its own genetic variance, but the genetic effect from different environments are not correlated) 
+           R - block-diagonal (each environment has its own residual variance)
+           B - identity (all blocks have the same variance)
+           
+In this model, the genotype effect is nested within the diagonal structure of environments. That means that each environment has its own genetic variance, which seems reasonable, but, this structure assumes that observations from the same genotype in different environments are not correlated, which is a strong assumption.  
+
+```{r}
+# Model 4 
+mod4 <- asreml(
+  fixed    = GY ~ 1,
+  random   = ~ env + env:rep + diag(env):gen,
+  residual = ~ dsum(~idv(units) | env),
+  data     = df_filter,
+  maxit = 100)
+aic4 <- summary(mod4)$aic; aic4
+
+```
+
+- Model 5: G - Heterogeneous compound symmetry (each environment has its own genetic variance, and there is a uniform correlation that connects genotypes in different environments) 
+           R - block-diagonal (each environment has its own residual variance)
+           B - identity (all blocks have the same variance)
+
+In this model, the genotype effect is also nested within environments, which has heterogeneous variances for different environments and uniform correlation between environments. So, genotypes from the same environment have the same genetic variance, and the same genotypes in different environments are connected by a uniform correlation. This also allow the prediction of genotypes at untested environments.
+
+
+```{r}
+# Model 5
+mod5 <- asreml(
+  fixed    = GY ~ 1,
+  random   = ~ env + env:rep + corh(env):gen,
+  residual = ~ dsum(~idv(units) | env),
+  data     = df_filter,
+  maxit = 100)
+aic5 <- summary(mod5)$aic ; aic5
+
+```
+
+
+- Model 6 and 7: G - Unstructured with heterogeneuous variances (each environment has its own genetic variance, and different correlations connect genotypes of different environments) 
+           R - block-diagonal (each environment has its own residual variance)
+           B - identity (all blocks have the same variance)
+
+In both models below, the genotype effect is also nested within environments, which has heterogeneous variances for different environments and a distinct correlation for each pair of environments. So, genotypes from the same environment have the same variance, and observations from the same genotype in different environments are connected by a correlation that is specific to that pair of environments. That is different from Model 5, where a single correlation value was applied to every pair of environment.
+
+Although the assumptions of these models are least strong, the variance component estimation did not converge, probably because of the high number of parameters. So we were not able to use this models below.
+
+```{r}
+# Model 6 and 7
+mod6 <- asreml(
+  fixed    = GY ~ 1,
+  random   = ~ env + env:rep + us(env):gen,
+  residual = ~ dsum(~idv(units) | env),
+  data     = df_filter,
+  maxit = 300)
+
+mod7 <- asreml(
+  fixed    = GY ~ 1,
+  random   = ~ env + env:rep + corgh(env):gen,
+  residual = ~ dsum(~idv(units) | env),
+  data     = df_filter,
+  maxit = 300)
+```
+
+
+```{r}
+modelos_aic <- data.frame(
+  modelo = factor(
+    c("CS(G)-ID(R)", "CS(G)-DIAG(R)", "CS(G)-DIAG(B)-DIAG(R)", "DIAG(G)-DIAG(R)",
+      "HCS(G)-DIAG(R)"),
+    levels = c("CS(G)-ID(R)", "CS(G)-DIAG(R)", "CS(G)-DIAG(B)-DIAG(R)", "DIAG(G)-DIAG(R)",
+               "HCS(G)-DIAG(R)") 
+  ), AIC = c(aic1, aic2, aic3, aic4, aic5))
+  
+  ggplot(modelos_aic, aes(y = modelo, x = AIC)) +
+    geom_point(size = 3, shape = 15, colour = "#10342d") +
+    geom_segment(aes(x = min(AIC) - 50, xend = AIC, y = modelo, yend = modelo),
+                 linewidth = 1.5, colour = "#10342d") +
+    geom_label(aes(label = round(AIC, 1)), size = 4,
+               position = position_nudge(y = 0.3, x = -30)) +
+    theme_minimal(base_size = 14) +
+    labs(y = "Modelo", x = "AIC",
+         title = "Comparação de estruturas de covariância G×A",
+         subtitle = "Variável resposta: GY | Dados Zâmbia (Soja)")
+
+```
+
+
+
+
