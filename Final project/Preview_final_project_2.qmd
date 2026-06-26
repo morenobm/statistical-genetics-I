@@ -170,14 +170,21 @@ env_year_table |>
   )
 ```
 
-# Outliers Removal
+# Methodology
 
-First, we performed some analysis to remove outlier data that are not
-agronomically consistent, and we standardized the codification of
-missing information to NA.
+## Exploratory Data Analysis
+
+First, we performed some exploratory data analysis
+([details](https://htmlpreview.github.io/?https://github.com/morenobm/statistical-genetics-I/blob/main/Final%20project/Multi%20Trial%20EDA.html))
+
+In this step, potential outliers were identified as values more than
+three standard deviations from the mean @fig-ou
+
+These values were analysed to verify if they were agronomically
+consistent before removing them.
 
 ```{r}
-#| label: outliers_GY
+#| label: fig-outliers
 
 # Normal Distribution Sd's
 ggplot(data, aes(x = GY)) +
@@ -191,21 +198,22 @@ ggplot(data, aes(x = GY)) +
        x = "Value", y = "Frequency") +
   theme_minimal()
 
-# Boxplot outliers
-p_hist <- ggplot(data, aes(x = GY)) +
-  geom_histogram(bins = 100, fill = "steelblue", alpha = 0.7) +
-  theme_minimal() +
-  theme(axis.title.x = element_blank())
+# # Boxplot outliers
+# p_hist <- ggplot(data, aes(x = GY)) +
+#   geom_histogram(bins = 100, fill = "steelblue", alpha = 0.7) +
+#   theme_minimal() +
+#   theme(axis.title.x = element_blank())
+# 
+# p_box <- ggplot(data, aes(y = GY, x = "")) +
+#   geom_boxplot(fill = "steelblue", alpha = 0.7, outlier.color = "red", 
+#                outlier.size = 2, outlier.alpha = 0.5) +
+#   coord_flip() +
+#   theme_minimal() +
+#   theme(axis.title.y = element_blank(),# p_hist / p_box + plot_layout(heights = c(3, 1))
 
-p_box <- ggplot(data, aes(y = GY, x = "")) +
-  geom_boxplot(fill = "steelblue", alpha = 0.7, outlier.color = "red", 
-               outlier.size = 2, outlier.alpha = 0.5) +
-  coord_flip() +
-  theme_minimal() +
-  theme(axis.title.y = element_blank(),
-        axis.text.y = element_blank())
-
-p_hist / p_box + plot_layout(heights = c(3, 1))
+#         axis.text.y = element_blank())
+# 
+# p_hist / p_box + plot_layout(heights = c(3, 1))
 
 ## Removing outliers
 df <- data|> 
@@ -727,6 +735,37 @@ the model selected for further analysis.
 
 ```
 
+The heatmap of predicted values from the model for each genotype ×
+environment combination visually synthesizes the three components of
+phenotypic variation within the network (@fig-blups_per_env). The
+horizontal gradient, ranging from light green (E0279, on the left) to
+dark green (E0107, on the right), reflects the dominant environmental
+effect, confirming that the mean yield of the environments constitutes
+the primary source of variation in the network. The vertical gradient,
+although less intense, represents the genotypic main effect, with
+genotypes possessing a higher overall mean yield concentrated at the top
+with consistently lighter shades.
+
+The G×E interaction manifests itself in the patterns that disrupt the
+monotony of these gradients. Dark cells within predominantly light
+columns indicate genotypes underperforming in favorable environments.
+This pattern is particularly evident in E0229, whose profile of intense
+rank reorganization had already been identified in the AMMI analysis
+(@fig-ammi-biplots). Conversely, lighter cells within dark columns,
+visible in E0253, E0225, and E0227, showen genotypes with specific
+adaptability to unfavorable environments. These materials are
+interesting for targeted recommendations in marginal rainfed regions, a
+behavior consistent with the specific affinity for E0227 previously
+identified in the AMMI2 biplot.
+
+Furthermore, the heatmap visually corroborates the mega-environments
+previously delineated by the AMMI2 model: E0279, E0278, and E0284 form a
+homogeneous, high-yielding block on the left; E0227, E0283, E0108, and
+E0107 comprise the uniformly unfavorable block on the right; and E0252,
+E0253, and E0225 display a much more heterogeneous pattern of cells in
+the central-right region, which is entirely consistent with their highly
+distinct interaction profiles.
+
 ```{r}
 #| label: fig-trajectory
 #| fig-cap: "Environmental Index trajectory of the evaluated locations across years"
@@ -933,155 +972,223 @@ p_ammi2 <- plot_scores(ammi, type = 2, title = FALSE) +
 
 p_ammi1 + p_ammi2
 ```
-A strict mathematical of AMMI algorithm is the requirement of a completely balanced two-way classification matrix. Since multi-environment agricultural trials are inherently unbalanced due to localized entries and missing plots, data imputation was performed prior to the analysis. Missing cells were predicted using an additive main effects framework ($Y_{ij} = \mu + G_i + E_j$). This strategy  preserved the network's connectivity and allowed the AMMI model to converge without discarding partially evaluated genotypes or environments. 
 
-The multiplicative interaction analysis revealed that the first principal component (PC1) explained 28.1% of the G×E interaction variance, while the second component (PC2) captured 15.7%, accounting for a cumulative total of 43.8% of the interaction sum of squares.In the AMMI1 biplot (@fig-ammi-biplots A), environment E0279 stood out as the most productive environment in the entire network, exhibiting a high mean yield ceiling combined with moderate interaction scores. Conversely, environments E0227 and E0229 displayed the most extreme scores along the PC1 axis, indicating that these environments exert the strongest forces in altering genotypic rankings relative to the rest of the network. Regarding genotypic performance, G191, G115, and G069 combined high mean grain yields with PC1 scores close to zero, which traditionally suggests a profile of broad adaptability. 
+A strict mathematical of AMMI algorithm is the requirement of a
+completely balanced two-way classification matrix. Since
+multi-environment agricultural trials are inherently unbalanced due to
+localized entries and missing plots, data imputation was performed prior
+to the analysis. Missing cells were predicted using an additive main
+effects framework ($Y_{ij} = \mu + G_i + E_j$). This strategy preserved
+the network's connectivity and allowed the AMMI model to converge
+without discarding partially evaluated genotypes or environments.
 
-However, this pattern must be interpreted with caution. As previously identified in the regression analysis, genotypes such as G191 and G115 were evaluated in only two environments. Because their missing data points were filled using the additive main effects model (which inherently assumes an interaction deviation of zero) their coordinates were artificially dragged toward the biplot origin ($PC1 \approx 0$). Therefore, their apparent stability represents a mathematical artifact of the imputation process on sparse data rather than true biological buffering. In contrast, the group formed by G307, G310, G342, and G335 represents extensively tested materials that consistently achieved grain yields above 2,500 kg/ha with low interaction scores, consolidating them as truly robust candidates for stable performance across the network. 
+The multiplicative interaction analysis revealed that the first
+principal component (PC1) explained 28.1% of the G×E interaction
+variance, while the second component (PC2) captured 15.7%, accounting
+for a cumulative total of 43.8% of the interaction sum of squares.In the
+AMMI1 biplot (@fig-ammi-biplots A), environment E0279 stood out as the
+most productive environment in the entire network, exhibiting a high
+mean yield ceiling combined with moderate interaction scores.
+Conversely, environments E0227 and E0229 displayed the most extreme
+scores along the PC1 axis, indicating that these environments exert the
+strongest forces in altering genotypic rankings relative to the rest of
+the network. Regarding genotypic performance, G191, G115, and G069
+combined high mean grain yields with PC1 scores close to zero, which
+traditionally suggests a profile of broad adaptability.
 
-The AMMI2 biplot (@fig-ammi-biplots B) provided a multidimensional mapping of the interaction, revealing three distinct mega-environments based on the spatial clustering of environmental vectors:(i) High-Potential Managed Network: Environments E0279, E0278, and E0284 grouped tightly in the top-right quadrant, representing favorable conditions under irrigation or supplementary water regimes. Genotypes G137, G057, and G143 displayed strong specific adaptability to this cluster, marking them as ideal candidates for high-investment systems.(ii) High-Yielding Unique Interaction: Environment E0229 isolated itself on the left side of the axis, showcasing a unique interaction profile despite its high mean productivity.(iii) Unfavorable Network: Environments E0227, E0252, and E0253 clustered in the lower quadrants, forming a group of lower-yielding environments with distinct interaction patterns. Genotypes located near the tips of these vectors (such as G245 and G194 towards E0253) express specific affinity for these narrower conditions.
+However, this pattern must be interpreted with caution. As previously
+identified in the regression analysis, genotypes such as G191 and G115
+were evaluated in only two environments. Because their missing data
+points were filled using the additive main effects model (which
+inherently assumes an interaction deviation of zero) their coordinates
+were artificially dragged toward the biplot origin ($PC1 \approx 0$).
+Therefore, their apparent stability represents a mathematical artifact
+of the imputation process on sparse data rather than true biological
+buffering. In contrast, the group formed by G307, G310, G342, and G335
+represents extensively tested materials that consistently achieved grain
+yields above 2,500 kg/ha with low interaction scores, consolidating them
+as truly robust candidates for stable performance across the network.
 
-Finally, the central core of the AMMI2 biplot near the origin contains a dense cluster of genotypes, prominently including G307, G310, G342, and G263. Their proximity to the intersection of both interaction axes confirms their stable performance across both multiplicative dimensions, reinforcing their high predictability and broad agronomic buffering across the multi-environment network.
+The AMMI2 biplot (@fig-ammi-biplots B) provided a multidimensional
+mapping of the interaction, revealing three distinct mega-environments
+based on the spatial clustering of environmental vectors:(i)
+High-Potential Managed Network: Environments E0279, E0278, and E0284
+grouped tightly in the top-right quadrant, representing favorable
+conditions under irrigation or supplementary water regimes. Genotypes
+G137, G057, and G143 displayed strong specific adaptability to this
+cluster, marking them as ideal candidates for high-investment
+systems.(ii) High-Yielding Unique Interaction: Environment E0229
+isolated itself on the left side of the axis, showcasing a unique
+interaction profile despite its high mean productivity.(iii) Unfavorable
+Network: Environments E0227, E0252, and E0253 clustered in the lower
+quadrants, forming a group of lower-yielding environments with distinct
+interaction patterns. Genotypes located near the tips of these vectors
+(such as G245 and G194 towards E0253) express specific affinity for
+these narrower conditions.
+
+Finally, the central core of the AMMI2 biplot near the origin contains a
+dense cluster of genotypes, prominently including G307, G310, G342, and
+G263. Their proximity to the intersection of both interaction axes
+confirms their stable performance across both multiplicative dimensions,
+reinforcing their high predictability and broad agronomic buffering
+across the multi-environment network.
 
 ```{r}
-media_geral <- mean(df_filter$GY, na.rm = TRUE)
+#| label: fig-pi_index
+#| fig-cap: "Cálculo do Índice Pi (Top 15 Genótipos) para os diferentes ambientes"
+#| warning: false
+#| message: false
 
-medias_env <- df_filter |>
-  group_by(env) |>
-  summarise(efeito_env = mean(GY, na.rm = TRUE) - media_geral, .groups = "drop")
-
-medias_gen <- df_filter |>
-  group_by(gen) |>
-  summarise(efeito_gen = mean(GY, na.rm = TRUE) - media_geral, .groups = "drop")
-
-dat_ammi_completo <- df_filter |>
-  tidyr::complete(env, gen, rep) |>
-  left_join(medias_env, by = "env") |>
-  left_join(medias_gen, by = "gen") |>
-  mutate(
-    # Se o GY for NA, preenche com o modelo aditivo; caso contrário, mantém o GY real
-    GY = ifelse(is.na(GY), media_geral + efeito_env + efeito_gen, GY)
-  ) |>
-  select(env, gen, rep, GY) # Manter apenas as colunas necessárias
-
-ammi <- metan::performs_ammi(
-  .data = dat_ammi_completo,
-  env   = "env",
-  gen   = "gen",
-  rep   = "rep",
-  resp  = "GY"
-)
-
-ggarrange(plot_scores(ammi, type = 1), plot_scores(ammi, type = 2))
-
-plot(ammi, type = "AMMI1")
-plot(ammi, type = "AMMI2")
-
+  ge_table <- pred[, c("gen", "env", "predicted.value")] |>
+    pivot_wider(names_from = "env", values_from = "predicted.value") |>
+    column_to_rownames("gen")
+  
+  Pi <- apply(ge_table, 1, function(x) {
+    sum((x - apply(ge_table, 2, max))^2) / (2 * ncol(ge_table))})
+  
+  df_Pi <- data.frame(gen = names(Pi), Pi = Pi) |>
+    arrange(Pi) |>
+    slice(1:15)
+  
+  ggplot(data = df_Pi, aes(x = reorder(gen, Pi), y = Pi)) +
+    geom_col(colour = "black", aes(fill = Pi)) +
+    scale_fill_gradient(high = "#10342d", low = "#b2bc63") +
+    theme_minimal(base_size = 13) +
+    theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+          legend.position = "none") +
+    labs(y = expression(P[i]), x = "Genótipo",
+         title = "Índice Pi (Lin & Binns)")
 ```
 
 ```{r}
+#| label: fig-sf_index
+#| fig-cap: "Cálculo do Safety First (Top 15 Genótipos) para os diferentes ambientes"
+#| warning: false
+#| message: false
 
-index <- data.frame(
-  index = tapply(df_filter$GY, df_filter$env, mean) - mean(df_filter$GY)
-) |> rownames_to_column("env")
-
-dat_grafico_amb <- merge(df_filter, index, by = "env")
-
-ggplot() +
-  geom_point(data = subset(index, index < 0),
-             aes(x = env, y = index, colour = "Desfavorável", fill = "Desfavorável"),
-             size = 2.5, shape = 25) +
-  geom_point(data = subset(index, index > 0),
-             aes(x = env, y = index, colour = "Favorável", fill = "Favorável"),
-             size = 2.5, shape = 24) +
-  geom_hline(aes(yintercept = 0), linetype = "dashed", linewidth = 1.2) +
-  labs(y = "Índice Ambiental", x = "Ambiente", colour = "", fill = "") +
-  theme_bw(base_size = 14) +
-  theme(legend.position = "top",
-        axis.text.x = element_text(angle = 45, hjust = 1)) +
-  scale_colour_manual(values = c("firebrick","forestgreen")) +
-  scale_fill_manual(values = c("firebrick","forestgreen"))
-
+  alpha <- 0.10
+  SF <- apply(ge_table, 1, function(x) mean(x) - qnorm(1 - alpha) * sd(x))
   
-  media_geral <- mean(df_filter$GY, na.rm = TRUE)
+  df_SF <- data.frame(gen = names(SF), SF = SF) |>
+    arrange(desc(SF)) |>
+    slice(1:15)
+  
+  ggplot(data = df_SF, aes(x = reorder(gen, -SF), y = SF)) +
+    geom_col(colour = "black", aes(fill = SF)) +
+    scale_fill_gradient(low = "#10342d", high = "#b2bc63") +
+    theme_classic(base_size = 13) +
+    theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+          legend.position = "none") +
+    labs(y = "Índice Calculado", x = "Genótipo",
+         title = "Indíce Safety-First")
+```
 
-medias_env <- df_filter |>
-  group_by(env) |>
-  summarise(efeito_env = mean(GY, na.rm = TRUE) - media_geral, .groups = "drop")
+The ranking derived from the superiority index ($P_i$) indicates that
+genotypes with the lowest values exhibit the shortest distance to the
+maximum performing genotype within each environment, thus identifying
+materials with superior broad adaptation. Under this criterion,
+genotypes G342, G307, G310, G138, and G255 stood out with the lowest
+$P_i$ estimates, demonstrating strong convergence with the results
+obtained from Eskridge’s safety-first index @fig-pi_index @fig-sf_index
 
-medias_gen <- df_filter |>
-  group_by(gen) |>
-  summarise(efeito_gen = mean(GY, na.rm = TRUE) - media_geral, .groups = "drop")
+Interestingly, in the previous single-trial analyses, genotypes G092 and
+G233 were top-ranked across multiple individual environments, yet they
+were not selected by the global indices. This discrepancy highlights the
+importance of accounting for genotype-by-environment ($G \times E$)
+effects through multi-environment trial (MET) modeling. When evaluated
+simultaneously across the entire network, the shifting in genotype
+rankings across locations (crossover interaction) penalizes genotypes
+with high specific adaptation but low yield stability. This justifies
+our selection strategy, which prioritizes materials capable of
+mitigating environmental fluctuations through stable and predictable
+performance.
 
-dat_ammi_completo <- df_filter |>
-  tidyr::complete(env, gen, rep) |>
-  left_join(medias_env, by = "env") |>
-  left_join(medias_gen, by = "gen") |>
-  mutate(
-    # Se o GY for NA, preenche com o modelo aditivo; caso contrário, mantém o GY real
-    GY = ifelse(is.na(GY), media_geral + efeito_env + efeito_gen, GY)
-  ) |>
-  select(env, gen, rep, GY) # Manter apenas as colunas necessárias
+Furthermore, the classical stability analyses (AMMI and Eberhart &
+Russell) also identified genotype G342 as superior. This consensus
+demonstrates that despite the distinct mathematical foundations,
+assumptions, and statistical properties of each method, highly stable
+and high-yielding germplasm can be robustly identified when the genetic
+signal is strong.
 
-ammi <- metan::performs_ammi(
-  .data = dat_ammi_completo,
-  env   = "env",
-  gen   = "gen",
-  rep   = "rep",
-  resp  = "GY"
+```{r}
+#| label: fig-env_con
+#| fig-cap: "Genotypes Presence on Different Environments"
+
+table_connect <- table(as.character(df$env), as.character(df$gen))
+table_connect[table_connect > 0] <- 1
+table_connect <- as.data.frame(table_connect)
+
+df_water <- df %>% 
+  distinct(env, RAINFED) %>% 
+  rename(Var1 = env) 
+
+table_connect <- merge(table_connect, df_water, by = "Var1", all.x = TRUE)
+table_connect$Status <- ifelse(table_connect$Freq == 0, "Absence", as.character(table_connect$RAINFED))
+conect_perc <- tapply(table_connect$Freq, table_connect$Var2, sum) / length(unique(df_filter$env)) * 100
+
+conect_perc <- data.frame(
+  Genótipo = names(conect_perc),
+  Conectividade = conect_perc
 )
 
-ggarrange(plot_scores(ammi, type = 1), plot_scores(ammi, type = 2))
+conect_perc <- conect_perc[order(conect_perc$Conectividade, decreasing = TRUE), ]
 
-plot(ammi, type = "AMMI1")
-plot(ammi, type = "AMMI2")
-  
-  
+kable(
+  conect_perc,
+  caption = "Connectivity of genotypes across experiments",
+  align = "c"
+)
 
+table_connect$Var2 <- factor(as.character(table_connect$Var2), levels = conect_perc$Genótipo)
+ordem_env <- names(sort(tapply(table_connect$Freq, table_connect$Var1, sum), decreasing = TRUE))
+table_connect$Var1 <- factor(as.character(table_connect$Var1), levels = ordem_env)
 
-  ###########################
-  # Genotypes
-  ##########################
-  g342 <- df_filter |> filter(gen == "G342") |> select (env) |> unique()
-  g307 <- df_filter |> filter(gen == "G307") |> select (env) |> unique()
-  g310 <- df_filter |> filter(gen == "G310") |> select (env) |> unique()
-  g108 <- df_filter |> filter(gen == "G138") |> select (env) |> unique()
+genotipos_alvo <- c("G342", "G138") 
+niveis_genotipos <- levels(table_connect$Var2)
+rotulos_customizados <- ifelse(niveis_genotipos %in% genotipos_alvo, niveis_genotipos, "")
+cores_eixo_x <- ifelse(niveis_genotipos %in% genotipos_alvo, "red", "black")
+ggplot(table_connect, aes(x = Var2, y = Var1, fill = Status)) +
+  geom_tile() +
+  scale_fill_manual(
+    values = c(
+      "Absence"       = "white", 
+      "Irrigation"    = "#1b4332",  
+      "Supplementary" = "#40916c",  
+      "Rainfed"       = "#95d5b2"   
+    )
+  ) +
+  scale_x_discrete(labels = rotulos_customizados) + 
+  labs(
+    title = "Presence–absence of treatments across experiments by water regime",
+    x = "Genotypes",
+    y = "Environments",
+    fill = "Water Regime"
+  ) +
+  theme_minimal() + 
+  theme(
   
-  
-  
-  # Melhores sequeiro
-  top5 <- pred |>
-    filter(env %in% c("E0103","E0104","E0105","E0106","E0107","E0108",
-                      "E0169","E0170","E0171","E0172","E0173","E0174",
-                      "E0175","E0176")) |>
-    group_by(env) |>
-    arrange(desc(predicted.value), .by_group = TRUE) |>
-    slice_head(n = 5)
-  
-  # G342 - 13/14
-  # G307 - 7/14
-  # G310 - 4/14
-  
-  #############################
-  # Análise modelo 5
-  ############################
-  
-  mod5 <- asreml(
-    fixed    = GY ~ 1,
-    random   = ~ env + env:rep + corh(env):gen,
-    residual = ~ dsum(~idv(units) | env),
-    data     = df_filter,
-    maxit = 100)
-  aic5 <- summary(mod5)$aic
-  
-  plot(mod5)
-  
-  pred <- predict.asreml(object = mod5,classify = "gen:env",sed=TRUE)
-  varcomp <- summary(mod5)$varcomp
-  
-  h2_mod5 <- 1-(mean(pred$sed[upper.tri(pred$sed)]^2)/(2*mean(varcomp[4:36,1])))
-  
+    axis.text.x = element_text(color = cores_eixo_x, angle = 90, vjust = 0.5, hjust = 1, size = 8, face = "bold"),
+    axis.ticks.x = element_line(color = ifelse(rotulos_customizados == "", NA, "gray")), 
+    panel.grid = element_blank() 
+  )
 ```
+
+Nevertheless, although this methodological convergence supports the
+selection of these genotypes based only on rankings and index values, a
+detailed examination of the cultivation history reveals an important
+environmental restriction. These higher-ranked genotypes were evaluated
+under contrasting water regimes across the trial network (@fig-env_con).
+For instance, genotype G342 was tested exclusively under irrigated or
+supplementary irrigation conditions, with the notable exception of
+genotype G138, which was evaluated solely under rainfed environments.
+
+In this scenario, selection based purely on stability indices rankings
+must be conducted with caution. The apparent broad stability of
+materials such as G342 may, in fact, reflect the effect of management on
+the grain yield. Therefore, final recommendations must be strictly
+stratified to prevent genotypes selected under an irrigation bias from
+being recommended for rainfed systems, where severe water deficits could
+drastically penalize the expression of their yield potential.
 
 ```{r}
  
@@ -1227,131 +1334,3 @@ plot(ammi, type = "AMMI2")
     coord_cartesian(clip = "off") +  # evita cortar o texto que fica abaixo do eixo
     theme(plot.margin = margin(b = 20))  # espaço extra abaixo do gráfico
 ```
-
-
-
-# # Bruna Certo
-
-```{r}
-#| label: fig-pi_index
-#| fig-cap: "Cálculo do Índice Pi (Top 15 Genótipos) para os diferentes ambientes"
-#| warning: false
-#| message: false
-
-  ge_table <- pred[, c("gen", "env", "predicted.value")] |>
-    pivot_wider(names_from = "env", values_from = "predicted.value") |>
-    column_to_rownames("gen")
-  
-  Pi <- apply(ge_table, 1, function(x) {
-    sum((x - apply(ge_table, 2, max))^2) / (2 * ncol(ge_table))})
-  
-  df_Pi <- data.frame(gen = names(Pi), Pi = Pi) |>
-    arrange(Pi) |>
-    slice(1:15)
-  
-  ggplot(data = df_Pi, aes(x = reorder(gen, Pi), y = Pi)) +
-    geom_col(colour = "black", aes(fill = Pi)) +
-    scale_fill_gradient(high = "#10342d", low = "#b2bc63") +
-    theme_minimal(base_size = 13) +
-    theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
-          legend.position = "none") +
-    labs(y = expression(P[i]), x = "Genótipo",
-         title = "Índice Pi (Lin & Binns)")
-```
-
-```{r}
-#| label: fig-sf_index
-#| fig-cap: "Cálculo do Safety First (Top 15 Genótipos) para os diferentes ambientes"
-#| warning: false
-#| message: false
-
-  alpha <- 0.10
-  SF <- apply(ge_table, 1, function(x) mean(x) - qnorm(1 - alpha) * sd(x))
-  
-  df_SF <- data.frame(gen = names(SF), SF = SF) |>
-    arrange(desc(SF)) |>
-    slice(1:15)
-  
-  ggplot(data = df_SF, aes(x = reorder(gen, -SF), y = SF)) +
-    geom_col(colour = "black", aes(fill = SF)) +
-    scale_fill_gradient(low = "#10342d", high = "#b2bc63") +
-    theme_classic(base_size = 13) +
-    theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
-          legend.position = "none") +
-    labs(y = "Índice Calculado", x = "Genótipo",
-         title = "Indíce Safety-First")
-```
-
-```{r}
-#| label: fig-env_con
-#| fig-cap: "Genotypes Presence on Different Environments"
-
-table_connect <- table(as.character(df$env), as.character(df$gen))
-table_connect[table_connect > 0] <- 1
-table_connect <- as.data.frame(table_connect)
-
-df_water <- df %>% 
-  distinct(env, RAINFED) %>% 
-  rename(Var1 = env) 
-
-table_connect <- merge(table_connect, df_water, by = "Var1", all.x = TRUE)
-table_connect$Status <- ifelse(table_connect$Freq == 0, "Absence", as.character(table_connect$RAINFED))
-conect_perc <- tapply(table_connect$Freq, table_connect$Var2, sum) / length(unique(df_filter$env)) * 100
-
-conect_perc <- data.frame(
-  Genótipo = names(conect_perc),
-  Conectividade = conect_perc
-)
-
-conect_perc <- conect_perc[order(conect_perc$Conectividade, decreasing = TRUE), ]
-
-kable(
-  conect_perc,
-  caption = "Connectivity of genotypes across experiments",
-  align = "c"
-)
-
-table_connect$Var2 <- factor(as.character(table_connect$Var2), levels = conect_perc$Genótipo)
-ordem_env <- names(sort(tapply(table_connect$Freq, table_connect$Var1, sum), decreasing = TRUE))
-table_connect$Var1 <- factor(as.character(table_connect$Var1), levels = ordem_env)
-
-genotipos_alvo <- c("G342", "G138") 
-niveis_genotipos <- levels(table_connect$Var2)
-rotulos_customizados <- ifelse(niveis_genotipos %in% genotipos_alvo, niveis_genotipos, "")
-cores_eixo_x <- ifelse(niveis_genotipos %in% genotipos_alvo, "red", "black")
-ggplot(table_connect, aes(x = Var2, y = Var1, fill = Status)) +
-  geom_tile() +
-  scale_fill_manual(
-    values = c(
-      "Absence"       = "white", 
-      "Irrigation"    = "#1b4332",  
-      "Supplementary" = "#40916c",  
-      "Rainfed"       = "#95d5b2"   
-    )
-  ) +
-  scale_x_discrete(labels = rotulos_customizados) + 
-  labs(
-    title = "Presence–absence of treatments across experiments by water regime",
-    x = "Genotypes",
-    y = "Environments",
-    fill = "Water Regime"
-  ) +
-  theme_minimal() + 
-  theme(
-  
-    axis.text.x = element_text(color = cores_eixo_x, angle = 90, vjust = 0.5, hjust = 1, size = 8, face = "bold"),
-    axis.ticks.x = element_line(color = ifelse(rotulos_customizados == "", NA, "gray")), 
-    panel.grid = element_blank() 
-  )
-```
-
-The ranking derived from the superiority index ($P_i$) indicates that genotypes with the lowest values exhibit the shortest distance to the maximum performing genotype within each environment, thus identifying materials with superior broad adaptation. Under this criterion, genotypes G342, G307, G310, G138, and G255 stood out with the lowest $P_i$ estimates, demonstrating strong convergence with the results obtained from Kataoka’s safety-first index.
-
-
-Interestingly, in the previous single-trial analyses, genotypes G092 and G233 were top-ranked across multiple individual environments, yet they were not selected by the global indices. This discrepancy highlights the importance of accounting for genotype-by-environment ($G \times E$) effects through multi-environment trial (MET) modeling. When evaluated simultaneously across the entire network, the shifting in genotype rankings across locations (crossover interaction) penalizes genotypes with high specific adaptation but low yield stability. This justifies our selection strategy, which prioritizes materials capable of mitigating environmental fluctuations through stable and predictable performance.
-
-Furthermore, the classical stability analyses (AMMI and Eberhart & Russell) also identified genotype G342 as superior. This consensus demonstrates that despite the distinct mathematical foundations, assumptions, and statistical properties of each method, highly stable and high-yielding germplasm can be robustly identified when the genetic signal is strong.
-
-Nevertheless, although this methodological convergence supports the selection of these genotypes based only on rankings and index values, a detailed examination of the cultivation history reveals an important environmental restriction. These higher-ranked genotypes were evaluated under contrasting water regimes across the trial network ( @ fig-env_con ). For instance, genotype G342 was tested exclusively under irrigated or supplementary irrigation conditions, with the notable exception of genotype G138, which was evaluated solely under rainfed environments.
-
-In this scenario, selection based purely on stability indices rankings must be conducted with caution. The apparent broad stability of materials such as G342 may, in fact, reflect the effect of management on the grain yield. Therefore, final recommendations must be strictly stratified to prevent genotypes selected under an irrigation bias from being recommended for rainfed systems, where severe water deficits could drastically penalize the expression of their yield potential.
