@@ -1344,3 +1344,14 @@ ggplot(table_connect, aes(x = Var2, y = Var1, fill = Status)) +
     panel.grid = element_blank() 
   )
 ```
+
+The ranking derived from the superiority index ($P_i$) indicates that genotypes with the lowest values exhibit the shortest distance to the maximum performing genotype within each environment, thus identifying materials with superior broad adaptation. Under this criterion, genotypes G342, G307, G310, G138, and G255 stood out with the lowest $P_i$ estimates, demonstrating strong convergence with the results obtained from Kataoka’s safety-first index.
+
+
+Interestingly, in the previous single-trial analyses, genotypes G092 and G233 were top-ranked across multiple individual environments, yet they were not selected by the global indices. This discrepancy highlights the importance of accounting for genotype-by-environment ($G \times E$) effects through multi-environment trial (MET) modeling. When evaluated simultaneously across the entire network, the shifting in genotype rankings across locations (crossover interaction) penalizes genotypes with high specific adaptation but low yield stability. This justifies our selection strategy, which prioritizes materials capable of mitigating environmental fluctuations through stable and predictable performance.
+
+Furthermore, the classical stability analyses (AMMI and Eberhart & Russell) also identified genotype G342 as superior. This consensus demonstrates that despite the distinct mathematical foundations, assumptions, and statistical properties of each method, highly stable and high-yielding germplasm can be robustly identified when the genetic signal is strong.
+
+Nevertheless, although this methodological convergence supports the selection of these genotypes based only on rankings and index values, a detailed examination of the cultivation history reveals an important environmental restriction. These higher-ranked genotypes were evaluated under contrasting water regimes across the trial network ( @ fig-env_con ). For instance, genotype G342 was tested exclusively under irrigated or supplementary irrigation conditions, with the notable exception of genotype G138, which was evaluated solely under rainfed environments.
+
+In this scenario, selection based purely on stability indices rankings must be conducted with caution. The apparent broad stability of materials such as G342 may, in fact, reflect the effect of management on the grain yield. Therefore, final recommendations must be strictly stratified to prevent genotypes selected under an irrigation bias from being recommended for rainfed systems, where severe water deficits could drastically penalize the expression of their yield potential.
