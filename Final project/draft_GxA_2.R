@@ -287,138 +287,87 @@ modelos_aic <- data.frame(
   # ------------------------------------------------------------------------------
   # 9. CONECTIVIDADE DOS GENÓTIPOS ENTRE AMBIENTES
   # ------------------------------------------------------------------------------
-  
-  table_connect <- table(as.character(df_filter$env), as.character(df_filter$gen))
-  
-  # Convert to presence/absence
-  table_connect[table_connect > 0] <- 1
-  table_connect <- as.data.frame(table_connect)
-  
-  # Percentage of experiments in which each treatment is present
-  conect_perc <- tapply(table_connect$Freq, table_connect$Var2, sum) /                      length(unique(df_filter$env)) * 100
-  
-  conect_perc <- data.frame(
-    Genótipo = names(conect_perc),
-    Conectividade = conect_perc
-  )
-  
-  
-  conect_perc <- conect_perc[
-    order(conect_perc$Conectividade, decreasing = TRUE),
-  ]
-  
-  kable(
-    conect_perc,
-    caption = "Connectivity of genotypes across experiments",
-    align = "c"
-  )
-  
-  table_connect
-  
-  #Presence 
-  pres <- mean(table_connect$Freq) * 100
-  
-  #Absence
-  abs <- 100 - pres
-  
-  
-  table_connect$Var2 <- factor(as.character(table_connect$Var2), levels = conect_perc$Genótipo)
-  ordem_env <- names(sort(tapply(table_connect$Freq, table_connect$Var1, sum), decreasing = TRUE))
-  table_connect$Var1 <- factor(as.character(table_connect$Var1), levels = ordem_env)
-  
-  ggplot(table_connect, aes(x = Var2, y = Var1, fill = factor(Freq))) +
-    geom_tile() +
-    scale_fill_manual(
-      values = c("white", "#A7C7E7"),
-      labels = c("Absence", "Presence")
-    ) +
-    labs(
-      title = "Presence–absence of treatments across experiments",
-      x = "Genotypes (Sorted by Connectivity)",
-      y = "Environments",
-      fill = "Presence"
-    ) +
-    theme_minimal() + 
-    theme(
-      axis.text.x = element_blank(),
-      axis.ticks.x = element_blank(),
-      panel.grid = element_blank() 
+
+table_connect <- table(as.character(df_filter$env), as.character(df_filter$gen))
+table_connect[table_connect > 0] <- 1
+table_connect <- as.data.frame(table_connect)
+
+df_water <- df_filter %>% 
+  distinct(env, RAINFED) %>% 
+  rename(Var1 = env) 
+
+table_connect <- merge(table_connect, df_water, by = "Var1", all.x = TRUE)
+table_connect$Status <- ifelse(table_connect$Freq == 0, "Absence", as.character(table_connect$RAINFED))
+conect_perc <- tapply(table_connect$Freq, table_connect$Var2, sum) / length(unique(df_filter$env)) * 100
+
+conect_perc <- data.frame(
+  Genótipo = names(conect_perc),
+  Conectividade = conect_perc
+)
+
+conect_perc <- conect_perc[order(conect_perc$Conectividade, decreasing = TRUE), ]
+
+kable(
+  conect_perc,
+  caption = "Connectivity of genotypes across experiments",
+  align = "c"
+)
+
+table_connect$Var2 <- factor(as.character(table_connect$Var2), levels = conect_perc$Genótipo)
+ordem_env <- names(sort(tapply(table_connect$Freq, table_connect$Var1, sum), decreasing = TRUE))
+table_connect$Var1 <- factor(as.character(table_connect$Var1), levels = ordem_env)
+
+ggplot(table_connect, aes(x = Var2, y = Var1, fill = Status)) +
+  geom_tile() +
+  scale_fill_manual(
+    values = c(
+      "Absence"       = "white", 
+      "Irrigation"    = "#1b4332",  
+      "Supplementary" = "#40916c",  
+      "Rainfed"       = "#95d5b2"   
     )
+  ) +
+  labs(
+    title = "Presence–absence of treatments across experiments by water regime",
+    x = "Genotypes",
+    y = "Environments",
+    fill = "Water Regime"
+  ) +
+  theme_minimal() + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    panel.grid = element_blank() 
+  )
+
+genotipos_alvo <- c("G342", "G138") 
+niveis_genotipos <- levels(table_connect$Var2)
+rotulos_customizados <- ifelse(niveis_genotipos %in% genotipos_alvo, niveis_genotipos, "")
+cores_eixo_x <- ifelse(niveis_genotipos %in% genotipos_alvo, "red", "black")
+ggplot(table_connect, aes(x = Var2, y = Var1, fill = Status)) +
+  geom_tile() +
+  scale_fill_manual(
+    values = c(
+      "Absence"       = "white", 
+      "Irrigation"    = "#1b4332",  
+      "Supplementary" = "#40916c",  
+      "Rainfed"       = "#95d5b2"   
+    )
+  ) +
+  scale_x_discrete(labels = rotulos_customizados) + 
+  labs(
+    title = "Presence–absence of treatments across experiments by water regime",
+    x = "Genotypes",
+    y = "Environments",
+    fill = "Water Regime"
+  ) +
+  theme_minimal() + 
+  theme(
   
-  # Matrix
-  M <- xtabs(Freq ~ Var1 + Var2, data = table_connect)
-  
-  # Shared treatments
-  shared <- M %*% t(M)
-  
-  # Number of treatments per experiment
-  n_trat <- rowSums(M)
-  
-  # Jaccard
-  jaccard <- shared
-  
-  for(i in rownames(shared)) {
-    for(j in colnames(shared)) {
-      jaccard[i, j] <- shared[i, j] / (n_trat[i] + n_trat[j] - shared[i, j])
-    }
-  }
-  
-  diag(jaccard) <- 1
-  
-  pheatmap(
-    jaccard,
-    cluster_rows = TRUE,
-    cluster_cols = TRUE,
-    clustering_method = "average",
-    color = rev(hcl.colors(100, "Blues")),
-    fontsize_row = 10,
-    fontsize_col = 10,
-    angle_col = 90,
-    main = "Experiment connectivity based on shared genotypes")
-  
-  ## Heatmap com os genótipos
-  
-  # 1. Matriz de contingência original (Linhas = Ambientes, Colunas = Genótipos)
-  M <- xtabs(Freq ~ Var1 + Var2, data = table_connect)
-  
-  # 2. Shared environments per genotype (INVERTIDO: t(M) %*% M gera Genótipo x Genótipo)
-  shared_gen <- t(M) %*% M
-  
-  # 3. Número de ambientes em que cada genótipo está presente (Agora sim usamos colSums)
-  n_env_per_gen <- colSums(M)
-  
-  # 4. Inicializa a matriz de Jaccard para os Genótipos
-  jaccard_gen <- shared_gen
-  
-  # 5. Loop do Jaccard adaptado para os genótipos (com proteção contra divisões por zero)
-  for(i in rownames(shared_gen)) {
-    for(j in colnames(shared_gen)) {
-      denominador <- n_env_per_gen[i] + n_env_per_gen[j] - shared_gen[i, j]
-      
-      if (denominador == 0) {
-        jaccard_gen[i, j] <- 0
-      } else {
-        jaccard_gen[i, j] <- shared_gen[i, j] / denominador
-      }
-    }
-  }
-  
-  # Garante a diagonal unitária (similaridade de um genótipo com ele mesmo é 1)
-  diag(jaccard_gen) <- 1
-  
-  # 6. Plot do Heatmap dos Genótipos
-  library(pheatmap)
-  pheatmap(
-    jaccard_gen,
-    cluster_rows = TRUE,
-    cluster_cols = TRUE,
-    clustering_method = "average",
-    color = rev(hcl.colors(100, "Blues")),
-    fontsize_row = 6,  
-    fontsize_col = 6,
-    angle_col = 90,
-    main = "Genotype connectivity based on shared environments")
-  
+    axis.text.x = element_text(color = cores_eixo_x, angle = 90, vjust = 0.5, hjust = 1, size = 8, face = "bold"),
+    axis.ticks.x = element_line(color = ifelse(rotulos_customizados == "", NA, "gray")), 
+    panel.grid = element_blank() 
+  )
   
   ###########################
   # Genotypes
