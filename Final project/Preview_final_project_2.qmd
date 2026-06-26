@@ -44,8 +44,7 @@ This report provides a data analysis of a multi-environment soybean
 breeding in Zambia dataset, focusing on two agronomic traits **Grain
 Yield** and **Plant Height**. The experimental design of the 33 trials
 in Zambia dataset is Randomized Complete Block Design (RCBD), in which
-all trials are located in different environment, being the **environment
-a combination of year x local**.
+all trials are located in different environment, being the **environment a combination of year x local**.
 
 ```{r}
 #| label: setup
@@ -280,10 +279,12 @@ for (i in envs_list){
 ```
 
 ```{r}
+#| label: tbl-single_trial
+#| output: false
 
 tabela_geral_GY |>
   mutate(
-    highlight = env %in% c("E0108", "E0175", "E0285")) |> 
+    highlight = env %in% c("E0108", "E0175","E0224", "E0280", "E0281", "E0285")) |> 
   gt(rowname_col = "env") |>
   tab_header(
     title = "Single-trial analysis for grain yield"
@@ -320,13 +321,14 @@ tabela_geral_GY |>
 
 ```
 
-Com base nas herdabilidades observadas na tabela acima, nota-se que as observações dos ambientes "E0108", "E0175" e "E0285" tem uma herdabildiade nula ou muito pequena. Isso mostra que somente uma pequena parte da variação das observações desses experimentos são causadas por fatores genético, e grande parte é causada pelo efeito do ambiente e fatores não controlados. 
+Based on the LRT and on the heritabilites shown above, the genetic variance within environments "E0108", "E0175", "E0224", "E0280", "E0281", "E0285" was not significant, meaning that observations from this trial have a great portion of noise. Because of this, these trials were removed from the multi-environment analysis.
 
-Analisar se o modelo fica melhor removendo esses ambientes ou não
 
 ```{r}
-# Removing envs "E0108", "E0175" e "E0285"
-df_filter <- df |> filter(!(env %in% c("E0108", "E0175", "E0285")))
+#| label: env_filter
+
+# Removing envs "E0108", "E0175","E0224", "E0280", "E0281", "E0285"
+df_filter <- df |> filter(!(env %in% c("E0108", "E0175","E0224", "E0280", "E0281", "E0285")))
 
 # New table
 env_year_table <- df_filter |>
@@ -337,7 +339,6 @@ env_year_table <- df_filter |>
     values_fn = list(env = paste),
     values_fill = "-"
   )
-
 env_year_table |>
   gt(rowname_col = "loc") |>
   tab_header(
@@ -382,146 +383,10 @@ ggplot(blup_all_GY,
 
 
 
-The fluctuation in the top-ranking positions highlights the presence of a strong Genotype by Environment (GxE) interaction (cross-over patterns) @fig-blup_by_envs_plots_GY
+The fluctuation in the top-ranking positions highlights the presence of a strong Genotype by Environment (GxE) interaction (cross-over patterns) @fig-blup_by_envs_plots_GY. Due to this interaction pattern, we will proceed to a multi-environment analysis, aiming to asses genotypes with higher stability for the locals considered.
 
-Devido à interação, analisaremos todos os ambientes juntos (estabilidade e GxE)
 
 # Multi trial - Statistical Model
-
-# Conectividade de genótipos entre os ambientes
-
-
-
-```{r}
-#| label: gen_connectivity
-
-# 
-table_connect <- table(as.character(df_filter$env), as.character(df_filter$gen))
-  
-# Convert to presence/absence
-table_connect[table_connect > 0] <- 1
-table_connect <- as.data.frame(table_connect)
-  
-# Percentage of experiments in which each treatment is present
-conect_perc <- tapply(table_connect$Freq, table_connect$Var2, sum) /length(unique(df_filter$env)) * 100
-  
-conect_perc <- data.frame(Genótipo = names(conect_perc),
-                          Conectividade = conect_perc)
-
-table_connect
-
-conect_perc <- conect_perc[order(conect_perc$Conectividade, decreasing = TRUE),]
-
-kable(conect_perc, caption = "Connectivity of genotypes across experiments",
-align = "c")
-
-#Presence 
-pres <- mean(table_connect$Freq) * 100
-
-#Absence
-abs <- 100 - pres
-
-  
-  table_connect$Var2 <- factor(as.character(table_connect$Var2), levels = conect_perc$Genótipo)
-  ordem_env <- names(sort(tapply(table_connect$Freq, table_connect$Var1, sum), decreasing = TRUE))
-  table_connect$Var1 <- factor(as.character(table_connect$Var1), levels = ordem_env)
-  
-  ggplot(table_connect, aes(x = Var2, y = Var1, fill = factor(Freq))) +
-    geom_tile() +
-    scale_fill_manual(
-      values = c("white", "#A7C7E7"),
-      labels = c("Absence", "Presence")
-    ) +
-    labs(
-      title = "Presence–absence of treatments across experiments",
-      x = "Genotypes (Sorted by Connectivity)",
-      y = "Environments",
-      fill = "Presence"
-    ) +
-    theme_minimal() + 
-    theme(
-      axis.text.x = element_blank(),
-      axis.ticks.x = element_blank(),
-      panel.grid = element_blank() 
-    )
-  
-  # Matrix
-  M <- xtabs(Freq ~ Var1 + Var2, data = table_connect)
-  
-  # Shared treatments
-  shared <- M %*% t(M)
-  
-  # Number of treatments per experiment
-  n_trat <- rowSums(M)
-  
-  # Jaccard
-  jaccard <- shared
-  
-  for(i in rownames(shared)) {
-    for(j in colnames(shared)) {
-      jaccard[i, j] <- shared[i, j] / (n_trat[i] + n_trat[j] - shared[i, j])
-    }
-  }
-  
-  diag(jaccard) <- 1
-  
-  pheatmap(
-    jaccard,
-    cluster_rows = TRUE,
-    cluster_cols = TRUE,
-    clustering_method = "average",
-    color = rev(hcl.colors(100, "Blues")),
-    fontsize_row = 10,
-    fontsize_col = 10,
-    angle_col = 90,
-    main = "Experiment connectivity based on shared genotypes"
-  )
-  
-  ## Heatmap com os genótipos
-  
-  # 1. Matriz de contingência original (Linhas = Ambientes, Colunas = Genótipos)
-  M <- xtabs(Freq ~ Var1 + Var2, data = table_connect)
-  
-  # 2. Shared environments per genotype (INVERTIDO: t(M) %*% M gera Genótipo x Genótipo)
-  shared_gen <- t(M) %*% M
-  
-  # 3. Número de ambientes em que cada genótipo está presente (Agora sim usamos colSums)
-  n_env_per_gen <- colSums(M)
-  
-  # 4. Inicializa a matriz de Jaccard para os Genótipos
-  jaccard_gen <- shared_gen
-  
-  # 5. Loop do Jaccard adaptado para os genótipos (com proteção contra divisões por zero)
-  for(i in rownames(shared_gen)) {
-    for(j in colnames(shared_gen)) {
-      denominador <- n_env_per_gen[i] + n_env_per_gen[j] - shared_gen[i, j]
-      
-      if (denominador == 0) {
-        jaccard_gen[i, j] <- 0
-      } else {
-        jaccard_gen[i, j] <- shared_gen[i, j] / denominador
-      }
-    }
-  }
-  
-  # Garante a diagonal unitária (similaridade de um genótipo com ele mesmo é 1)
-  diag(jaccard_gen) <- 1
-  
-  # 6. Plot do Heatmap dos Genótipos
-  library(pheatmap)
-  pheatmap(
-    jaccard_gen,
-    cluster_rows = TRUE,
-    cluster_cols = TRUE,
-    clustering_method = "average",
-    color = rev(hcl.colors(100, "Blues")),
-    fontsize_row = 6,  
-    fontsize_col = 6,
-    angle_col = 90,
-    main = "Genotype connectivity based on shared environments"
-  )
-  
-```
 
 Para analisar o desempenho dos genótipos nos diferentes locais conjuntamente, será também utilizado modelos mistos, que é mais apropriado para o desbalanceamento de dados.
 
@@ -529,25 +394,28 @@ Our inicial model is:
 
 **REVER MODELO (GxE)**
 
-$$y_{ijk}=l_{i} +b_{j}+g_{k}+e_{ijk}$$
+$$\mathbf{y}= \mathbf{1}\mu + \mathbf{Z}_1\mathbf{e} + \mathbf{Z}_2\mathbf{b}  + \mathbf{Z}_3\mathbf{g} + \varepsilon $$
 
 Where:
 
-$l_{i}$ is the environment random effects, as the environments (local x year combinations) can be treated as a random sample of all possible combinations of these factors
+$\mathbf{e}$ is the environment random effects, as the environments (local x year combinations) can be treated as a random sample of all possible combinations of these factors
 
-$b_{j}$ is the block random effects, as they are nested in environments $b \sim N(0,\sigma^2_bB)$
 
-$g_{k}$ is the genotype's random effects, where $g \sim N(0,\sigma^2_gG)$
+$\mathbf{b}$ is the block random effects, as they are nested in environments, with $\mathbf{b} \sim N(0,\sigma^2_b\mathbf{B})$
 
-$e_{ijk}$ is the residual random effect $e \sim N(0,\sigma^2_eR)$
+$\mathbf{g}$ is the genotype's random effects, with $\mathbf{g} \sim N(0,\sigma^2_g\mathbf{G})$
 
-Different (co)variances structures will be tested for the random effects in these models. Each one of the models make different assumptions regarding the residuals, block or genetic random distribution. First, we will analyse the residuals covariance matrix, then blocks and genetics.
+$\mathbf{\varepsilon}$ is the residual random effect, with $\mathbf{\varepsilon} \sim N(0,\sigma^2_e\mathbf{R})$
 
-- Model 1: G - compound symmetry (genetic variance is homogeneous for genotypes in different environments and the covariance between the same genotypes performance in any two environments is constant)
+Different (co)variances structures will be tested for the random effects in these models. Each one of the models make different assumptions regarding the residuals, block or genetic random distribution. First, we will analyse the residuals covariance matrix, then blocks and finally the covariance matrix of genetic effects.
+
+- **Model 1**: G - compound symmetry (genetic variance is homogeneous for genotypes in different environments and the covariance between the same genotypes performance in any two environments is constant)
            R - identity (all residuals have the same variance in different environments)
            B - identity (blocks in different environment have the same variance)
             
 ```{r}
+#| label: model1
+
 # Model 1
 mod1 <- asreml(
   fixed    = GY ~ 1,
@@ -555,17 +423,16 @@ mod1 <- asreml(
   residual = ~ idv(units),
   data     = df_filter,
   maxit = 100)
-aic1 <- summary(mod1)$aic ; aic1
-
 ```
 
-- Model 2: G - compound symmetry (all genotypes have the same variances and the same covariances in different environments)
+- **Model 2**: G - compound symmetry (all genotypes have the same variances and the same covariances in different environments)
            R - block-diagonal (each environment has its own residual variance)
            B - identity (blocks in different environment have the same variance)
            
-The assumption regarding R now seems to be more reasonable, as different environments impacts differently on the residuals. By analysing the AIC value, we observe that the model fitted better, compensating the parameters that were added.
-
+The assumption regarding R now seems to be more reasonable, as different environments impacts differently on the residuals.
 ```{r}
+#| label: model2
+
 # Model 2
 mod2 <- asreml(
   fixed    = GY ~ 1,
@@ -573,16 +440,19 @@ mod2 <- asreml(
   residual = ~ dsum(~idv(units) | env),
   data     = df_filter,
   maxit = 100)
-aic2 <- summary(mod2)$aic; aic2
 ```
 
-As in this trial there is no information about the position of the plots in the field, we are not capable of doing the classical spatial corrections, so these will be the structure adopted to the covariance matrix R. Now, we will analyse the block covariance matrix:
+As in this dataset there is no information about the position of the plots in the field, we are not capable of doing the classical spatial corrections, so these will be the only structures considered in the covariance matrix R. 
 
-- Model 3: G - compound symmetry (all genotypes have the same variances and the same covariances in different environments)
+Now, we will analyse the block covariance matrix:
+
+- **Model 3**: G - compound symmetry (all genotypes have the same variances and the same covariances in different environments)
            R - block-diagonal (each environment has its own residual variance)
            B - block-diagonal (each environment has its own block variance)
 
 ```{r}
+#| label: model3
+
 # Model 3
 mod3 <- asreml(
   fixed    = GY ~ 1,
@@ -590,18 +460,19 @@ mod3 <- asreml(
   residual = ~ dsum(~idv(units) | env),
   data     = df_filter,
   maxit = 100)
-aic3 <- summary(mod3)$aic; aic3
 ```
 
-Based on the AIC value, the third model did not fitted better than the second one. This occurred probably because in each environment, there are only 3 blocks to estimate the variance component. Based on that, we will assume that the previous structure for covariance matrix B (identity - Model 2) is better. Now, the genetic part will be analysed.
+Now, the genetic part will be analysed.
 
-- Model 4: G - block-diagonal (each environment has its own genetic variance, but the genetic effect from different environments are not correlated) 
+- **Model 4**: G - block-diagonal (each environment has its own genetic variance, but the genetic effect from different environments are not correlated) 
            R - block-diagonal (each environment has its own residual variance)
            B - identity (all blocks have the same variance)
            
 In this model, the genotype effect is nested within the diagonal structure of environments. That means that each environment has its own genetic variance, which seems reasonable, but, this structure assumes that observations from the same genotype in different environments are not correlated, which is a strong assumption.  
 
 ```{r}
+#| label: model4
+
 # Model 4 
 mod4 <- asreml(
   fixed    = GY ~ 1,
@@ -609,11 +480,9 @@ mod4 <- asreml(
   residual = ~ dsum(~idv(units) | env),
   data     = df_filter,
   maxit = 100)
-aic4 <- summary(mod4)$aic; aic4
-
 ```
 
-- Model 5: G - Heterogeneous compound symmetry (each environment has its own genetic variance, and there is a uniform correlation that connects genotypes in different environments) 
+- **Model 5**: G - Heterogeneous compound symmetry (each environment has its own genetic variance, and there is a uniform correlation that connects genotypes in different environments) 
            R - block-diagonal (each environment has its own residual variance)
            B - identity (all blocks have the same variance)
 
@@ -621,6 +490,8 @@ In this model, the genotype effect is also nested within environments, which has
 
 
 ```{r}
+#| label: model5
+
 # Model 5
 mod5 <- asreml(
   fixed    = GY ~ 1,
@@ -628,20 +499,20 @@ mod5 <- asreml(
   residual = ~ dsum(~idv(units) | env),
   data     = df_filter,
   maxit = 100)
-aic5 <- summary(mod5)$aic ; aic5
-
 ```
 
 
-- Model 6 and 7: G - Unstructured with heterogeneuous variances (each environment has its own genetic variance, and different correlations connect genotypes of different environments) 
+- **Model 6 and 7**: G - Unstructured with heterogeneuous variances (each environment has its own genetic variance, and different correlations connect genotypes of different environments) 
            R - block-diagonal (each environment has its own residual variance)
            B - identity (all blocks have the same variance)
 
-In both models below, the genotype effect is also nested within environments, which has heterogeneous variances for different environments and a distinct correlation for each pair of environments. So, genotypes from the same environment have the same variance, and observations from the same genotype in different environments are connected by a correlation that is specific to that pair of environments. That is different from Model 5, where a single correlation value was applied to every pair of environment.
+In both models above, the genotype effect is also nested within environments, which has heterogeneous variances for different environments and a distinct correlation for each pair of environments. So, genotypes from the same environment have the same variance, and observations from the same genotype in different environments are connected by a correlation that is specific to that pair of environments. That is different from Model 5, where a single correlation value was applied to every pair of environment.
 
-Although the assumptions of these models are least strong, the variance component estimation did not converge, probably because of the high number of parameters. So we were not able to use this models below.
+Although the assumptions of these models are least strong, the variance component estimation did not converge, probably because of the high number of parameters. So we were not able to use **Model 6 and 7**.
 
 ```{r}
+#| label: model6_7
+
 # Model 6 and 7
 mod6 <- asreml(
   fixed    = GY ~ 1,
@@ -659,7 +530,19 @@ mod7 <- asreml(
 ```
 
 
+
+
+# Resultados
+
 ```{r}
+#| label: aic
+
+aic1 <- summary(mod1)$aic
+aic2 <- summary(mod2)$aic
+aic3 <- summary(mod3)$aic
+aic4 <- summary(mod4)$aic
+aic5 <- summary(mod5)$aic 
+
 modelos_aic <- data.frame(
   modelo = factor(
     c("CS(G)-ID(R)", "CS(G)-DIAG(R)", "CS(G)-DIAG(B)-DIAG(R)", "DIAG(G)-DIAG(R)",
@@ -682,5 +565,4 @@ modelos_aic <- data.frame(
 ```
 
 
-
-
+Based on the AIC value, the third model did not fitted better than the second one. This occurred probably because in each environment, there are only 3 blocks to estimate the variance component. Based on that, we will assume that the previous structure for covariance matrix B (identity - Model 2) is better.
