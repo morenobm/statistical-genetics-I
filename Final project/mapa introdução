@@ -1,0 +1,42 @@
+library(tidyverse)
+library(ggplot2)
+library(maps)
+
+coords <- dat %>%
+  transmute(loc, env, YEAR,
+            LAT_raw = as.numeric(LAT),
+            LON_raw = as.numeric(LON),
+            LAT = ifelse(abs(LAT_raw) > 90, LAT_raw / 1000, LAT_raw),
+            LON = ifelse(abs(LON_raw) > 180, LON_raw / 1000, LON_raw)) %>%
+  filter(!is.na(LAT), !is.na(LON))
+
+loc_year <- coords %>%
+  group_by(loc, YEAR) %>%
+  summarise(n_trials = n_distinct(env),
+            LAT = mean(LAT), LON = mean(LON),
+            .groups = "drop")
+
+zambia_border <- map_data("world", region = "Zambia")
+
+p_map_year <- ggplot() +
+  geom_polygon(data = zambia_border,
+               aes(x = long, y = lat, group = group),
+               fill = "#f5f5f0", colour = "grey60", linewidth = 0.4) +
+  geom_point(data = loc_year,
+             aes(x = LON, y = LAT, size = n_trials, fill = loc),
+             shape = 21, colour = "white", stroke = 0.6, alpha = 0.9) +
+  scale_size_area(name = "Number of Trials", max_size = 8, breaks = c(1, 2, 3)) +
+  scale_fill_viridis_d(option = "turbo", name = "Location") + 
+  coord_quickmap() +
+  facet_wrap(~ YEAR) + 
+  labs(x = "Longitude (°)", y = "Latitude (°)",
+       title = "Spatio-Temporal Distribution of Trials — Zambia",
+       subtitle = "Colors represent distinct physical locations") +
+  theme_minimal(base_size = 12) +
+  theme(panel.background = element_rect(fill = "#dfe9f0", colour = NA),
+        panel.grid.major = element_line(colour = "white", linewidth = 0.3),
+        strip.background = element_rect(fill = "grey90", colour = NA),
+        strip.text = element_text(face = "bold", size = 12),
+        legend.position = "right") 
+
+print(p_map_year)
