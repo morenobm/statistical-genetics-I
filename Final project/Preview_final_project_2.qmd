@@ -22,18 +22,49 @@ editor:
   markdown: 
     wrap: 72
 ---
+
 # Introduction
 
-Soybean (*Glycine max* (L.) Merr.) is one of the most important crops worldwide, playing a strategic role in the production of plant protein, edible oil, and animal feed. In recent years, its expansion across the African continent has been driven by international breeding and genetic adaptation programs aimed at enhancing food security, increasing farmers' income, and promoting the sustainable development of local agricultural systems. Within this context, the Pan-African Soybean Variety Trials (PAT) program was established to evaluate soybean genotypes across multiple African environments, enabling the identification of superior germplasm for regional recommendation.
- 
- 
- To support these recommendations, multi-environment trials (METs) are essential, as they enable estimation and understanding of genotype-by-environment ($G \times E$) interactions. Although challenging because it alters the ranking and performance of genotypes across locations, this interaction offers an opportunity to identify materials with specific adaptations or broad stability, thereby maximizing the exploitation of their yield potential.
- 
- 
- In the present study, phenotypic data from this network were utilized, specifically from trials conducted in Zambia between 2019 and 2023. The dataset encompassed 33 environments, resulting from the combination of 16 locations **[INSERT FIGURE REFERENCE HERE]** and different crop years. The experiments were laid out in a randomized complete block design (RCBD) with three replications per environment. In each trial, 30 to 40 genotypes were evaluated, totaling 107 genetic materials tested across the network. Although agronomic traits such as plant height at maturity (PH_R8), days to flowering (FLW_DAYS), and emerged plant count (PLANT_EMERG_COUNT) were explored in preliminary analyses, grain yield (GY) was selected as the primary response variable for multi-environment modeling. To this end, the data were analyzed using two complementary analytical approaches: classic methods, including the Additive Main Effects and Multiplicative Interaction (AMMI) model and the Eberhart & Russell (1966) linear regression, and the predictive approach using linear mixed models via REML/BLUP.
- 
- 
- Given the above, the objective of this study was to evaluate the phenotypic adaptability and stability of 107 soybean genotypes evaluated in the Zambian trial network, aiming to select the most predictable and high-yielding materials for the region.
+Soybean (*Glycine max* (L.) Merr.) is one of the most important crops
+worldwide, playing a strategic role in the production of plant protein,
+edible oil, and animal feed. In recent years, its expansion across the
+African continent has been driven by international breeding and genetic
+adaptation programs aimed at enhancing food security, increasing
+farmers' income, and promoting the sustainable development of local
+agricultural systems. Within this context, the Pan-African Soybean
+Variety Trials (PAT) program was established to evaluate soybean
+genotypes across multiple African environments, enabling the
+identification of superior germplasm for regional recommendation.
+
+To support these recommendations, multi-environment trials (METs) are
+essential, as they enable estimation and understanding of
+genotype-by-environment ($G \times E$) interactions. Although
+challenging because it alters the ranking and performance of genotypes
+across locations, this interaction offers an opportunity to identify
+materials with specific adaptations or broad stability, thereby
+maximizing the exploitation of their yield potential.
+
+In the present study, phenotypic data from this network were utilized,
+specifically from trials conducted in Zambia between 2019 and 2023. The
+dataset encompassed 33 environments, resulting from the combination of
+16 locations ( @fig-maps @tbl-env-year) and different crop years. The
+experiments were laid out in a randomized complete block design (RCBD)
+with three replications per environment. In each trial, 30 to 40
+genotypes were evaluated, totaling 107 genetic materials tested across
+the network. Although agronomic traits such as plant height at maturity
+(PH_R8), days to flowering (FLW_DAYS), and emerged plant count
+(PLANT_EMERG_COUNT) were explored in preliminary analyses, grain yield
+(GY) was selected as the primary response variable for multi-environment
+modeling. To this end, the data were analyzed using two complementary
+analytical approaches: classic methods, including the Additive Main
+Effects and Multiplicative Interaction (AMMI) model and the Eberhart &
+Russell (1966) linear regression, and the predictive approach using
+linear mixed models via REML/BLUP.
+
+Given the above, the objective of this study was to evaluate the
+stability of 107 soybean genotypes evaluated in the Zambian trial
+network, aiming to select the most predictable and high-yielding
+materials for the region.
 
 ```{r}
 #| label: setup
@@ -50,7 +81,7 @@ knitr::opts_chunk$set(
 #| label: trials-data
 
 # Loading packages
-packages <- c("ggplot2", "patchwork", "tidyr", "dplyr", "purrr", "knitr", "kableExtra", "grid","ggcorrplot", "asreml","gt", "tidyverse")
+packages <- c("ggplot2", "patchwork", "tidyr", "dplyr", "purrr", "knitr", "kableExtra", "grid","ggcorrplot", "asreml","gt", "tidyverse", "ggrepel", "maps")
 invisible(lapply(packages, function(p){
   suppressMessages(suppressPackageStartupMessages(
   suppressWarnings(library(p, character.only = TRUE))))}))
@@ -60,8 +91,52 @@ data = read.csv("https://raw.githubusercontent.com/mauricioaraujj/Pan_African_Tr
 ```
 
 ```{r}
+#| label: fig-maps
+#| tbl-cap: "Geographic location of trials within years"
+
+coords <- data %>%
+  transmute(loc, env, YEAR,
+            LAT_raw = as.numeric(LAT),
+            LON_raw = as.numeric(LON),
+            LAT = ifelse(abs(LAT_raw) > 90, LAT_raw / 1000, LAT_raw),
+            LON = ifelse(abs(LON_raw) > 180, LON_raw / 1000, LON_raw)) %>%
+  filter(!is.na(LAT), !is.na(LON))
+
+loc_year <- coords %>%
+  group_by(loc, YEAR) %>%
+  summarise(n_trials = n_distinct(env),
+            LAT = mean(LAT), LON = mean(LON),
+            .groups = "drop")
+
+zambia_border <- map_data("world", region = "Zambia")
+
+p_map_year <- ggplot() +
+  geom_polygon(data = zambia_border,
+               aes(x = long, y = lat, group = group),
+               fill = "#f5f5f0", colour = "grey60", linewidth = 0.4) +
+  geom_point(data = loc_year,
+             aes(x = LON, y = LAT, size = n_trials, fill = loc),
+             shape = 21, colour = "white", stroke = 0.6, alpha = 0.9) +
+  scale_size_area(name = "Number of Trials", max_size = 8, breaks = c(1, 2, 3)) +
+  scale_fill_viridis_d(option = "turbo", name = "Location") + 
+  coord_quickmap() +
+  facet_wrap(~ YEAR) + 
+  labs(x = "Longitude (°)", y = "Latitude (°)",
+       title = "Spatio-Temporal Distribution of Trials — Zambia",
+       subtitle = "Colors represent distinct physical locations") +
+  theme_minimal(base_size = 12) +
+  theme(panel.background = element_rect(fill = "#dfe9f0", colour = NA),
+        panel.grid.major = element_line(colour = "white", linewidth = 0.3),
+        strip.background = element_rect(fill = "grey90", colour = NA),
+        strip.text = element_text(face = "bold", size = 12),
+        legend.position = "right") 
+
+print(p_map_year)
+```
+
+```{r}
 #| label: env-year-table
-#| tbl-cap: "Environment distribution"
+#| tbl-cap: "Environments combination (local x year)"
 
 env_year_table <- data |>
   distinct(loc, YEAR, env) |>
@@ -177,13 +252,18 @@ $g_{i}$ is the genotype's random effects, where
 $g_i \sim N(0, \sigma^2_g)$. This was decided due to the unbalanced
 nature of the data, as some trials had missing plots.
 
-$e_{ij}$ is the residual random effect, where $e_{ij} \sim N(0, \sigma^2_e)$. That is, assuming indepedence of residuals within trials
+$e_{ij}$ is the residual random effect, where
+$e_{ij} \sim N(0, \sigma^2_e)$. That is, assuming indepedence of
+residuals within trials
 
-As most trials are completely balanced, the broad-sense heritability was estimated as: 
+As most trials are completely balanced, the broad-sense heritability was
+estimated as:
 
-- individual/plot level: $H² = \frac{\sigma²_g}{ \sigma²_g + \sigma²_e}$, 
-- genotype level: $H² = \frac{\sigma²_g}{ \sigma²_g + \frac{\sigma^2_e}{3}}$ 
-- Cullis, 2006:  $ H^2 =  1 - \frac{\bar{SED^2}}{2\sigma²_g}$
+-   individual/plot level:
+    $H² = \frac{\sigma²_g}{ \sigma²_g + \sigma²_e}$,
+-   genotype level:
+    $H² = \frac{\sigma²_g}{ \sigma²_g + \frac{\sigma^2_e}{3}}$
+-   Cullis, 2006: \$ H\^2 = 1 - \frac{\bar{SED^2}}{2\sigma²_g}\$
 
 # Trait - Grain Yield
 
@@ -310,8 +390,11 @@ tabela_geral_GY |>
 
 ```
 
-Based on the LRT and on the heritabilites shown above, the genetic variance within environments "E0108", "E0175", "E0224", "E0280", "E0281", "E0285" was not significant, meaning that observations from this trial have a great portion of noise. Because of this, these trials were removed from the multi-environment analysis.
-
+Based on the LRT and on the heritabilites shown above, the genetic
+variance within environments "E0108", "E0175", "E0224", "E0280",
+"E0281", "E0285" was not significant, meaning that observations from
+this trial have a great portion of noise. Because of this, these trials
+were removed from the multi-environment analysis.
 
 ```{r}
 #| label: env_filter
@@ -370,33 +453,50 @@ ggplot(blup_all_GY,
       theme(axis.text.x = element_text(angle = 45, hjust = 1),legend.position = "none")
 ```
 
-
-
-The fluctuation in the top-ranking positions highlights the presence of a strong Genotype by Environment (GxE) interaction (cross-over patterns) @fig-blup_by_envs_plots_GY. Due to this interaction pattern, we will proceed to a multi-environment analysis, aiming to asses genotypes with higher stability for the locals considered.
-
+The fluctuation in the top-ranking positions highlights the presence of
+a strong Genotype by Environment (GxE) interaction (cross-over patterns)
+@fig-blup_by_envs_plots_GY. Due to this interaction pattern, we will
+proceed to a multi-environment analysis, aiming to asses genotypes with
+higher stability for the locals considered.
 
 # Multi-trial - Statistical Model
 
-To analyze genotypes performance in different environments, the following mixed model will be used. The inicial version of the model is:
+To analyze genotypes performance in different environments, the
+following mixed model will be used. The inicial version of the model is:
 
 $$\mathbf{y}= \mathbf{1}\mu + \mathbf{Z}_1\mathbf{e} + \mathbf{Z}_2\mathbf{b}  + \mathbf{Z}_3\mathbf{g} + \varepsilon $$
 
 Where:
 
-$\mathbf{e}$ is the environment random effects, as the environments (local x year combinations) can be treated as a random sample of all possible combinations of these factors
+$\mathbf{e}$ is the environment random effects, as the environments
+(local x year combinations) can be treated as a random sample of all
+possible combinations of these factors
 
-$\mathbf{b}$ is the block random effects, as they are nested in environments, with $\mathbf{b} \sim N(0,\sigma^2_b\mathbf{B})$
+$\mathbf{b}$ is the block random effects, as they are nested in
+environments, with $\mathbf{b} \sim N(0,\sigma^2_b\mathbf{B})$
 
-$\mathbf{g}$ is the genotype's random effects, with $\mathbf{g} \sim N(0,\sigma^2_g\mathbf{G})$
+$\mathbf{g}$ is the genotype's random effects, with
+$\mathbf{g} \sim N(0,\sigma^2_g\mathbf{G})$
 
-$\mathbf{\varepsilon}$ is the residual random effect, with $\mathbf{\varepsilon} \sim N(0,\sigma^2_e\mathbf{R})$
+$\mathbf{\varepsilon}$ is the residual random effect, with
+$\mathbf{\varepsilon} \sim N(0,\sigma^2_e\mathbf{R})$
 
-Different (co)variances structures will be tested for the random effects in these models. Each one of the models make different assumptions regarding the residuals, block or genetic random distribution. First, we will analyse the residuals covariance matrix, then blocks and finally the covariance matrix of genetic effects.
+Different (co)variances structures will be tested for the random effects
+in these models. Each one of the models make different assumptions
+regarding the residuals, block or genetic random distribution. First, we
+will analyse the residuals covariance matrix, then blocks and finally
+the covariance matrix of genetic effects.
 
-- **Model 1**: G - compound symmetry (genetic variance is homogeneous for genotypes in different environments and the covariance between the same genotypes performance in any two environments is constant)
-           R - identity (all residuals have the same variance in different environments)
-           B - identity (blocks in different environment have the same variance)
-            
+-   **Model 1**
+    -   G: compound symmetry (genetic variance is homogeneous for
+        genotypes in different environments and the covariance between
+        the same genotypes performance in any two environments is
+        constant)
+    -   R: identity (all residuals have the same variance in different
+        environments)
+    -   B: identity (blocks in different environment have the same
+        variance)
+
 ```{r}
 #| label: model1
 
@@ -409,11 +509,17 @@ mod1 <- asreml(
   maxit = 100)
 ```
 
-- **Model 2**: G - compound symmetry (all genotypes have the same variances and the same covariances in different environments)
-           R - block-diagonal (each environment has its own residual variance)
-           B - identity (blocks in different environment have the same variance)
-           
-The assumption regarding R now seems to be more reasonable, as different environments impacts differently on the residuals.
+-   **Model 2**
+    -   G: compound symmetry (all genotypes have the same variances and
+        the same covariances in different environments)
+    -   R: block-diagonal (each environment has its own residual
+        variance)
+    -   B: identity (blocks in different environment have the same
+        variance)
+
+The assumption regarding R now seems to be more reasonable, as different
+environments impacts differently on the residuals.
+
 ```{r}
 #| label: model2
 
@@ -426,13 +532,18 @@ mod2 <- asreml(
   maxit = 100)
 ```
 
-As in this dataset there is no information about the position of the plots in the field, we are not capable of doing the classical spatial corrections, so these will be the only structures considered in the covariance matrix R. 
+As in this dataset there is no information about the position of the
+plots in the field, we are not capable of doing the classical spatial
+corrections, so these will be the only structures considered in the
+covariance matrix R.
 
 Now, we will analyse the block covariance matrix:
 
-- **Model 3**: G - compound symmetry (all genotypes have the same variances and the same covariances in different environments)
-           R - block-diagonal (each environment has its own residual variance)
-           B - block-diagonal (each environment has its own block variance)
+-   **Model 3**
+-   G:compound symmetry (all genotypes have the same variances and the
+    same covariances in different environments)
+-   R: block-diagonal (each environment has its own residual variance)
+-   B: block-diagonal (each environment has its own block variance)
 
 ```{r}
 #| label: model3
@@ -448,11 +559,18 @@ mod3 <- asreml(
 
 Now, the genetic part will be analysed.
 
-- **Model 4**: G - block-diagonal (each environment has its own genetic variance, but the genetic effect from different environments are not correlated) 
-           R - block-diagonal (each environment has its own residual variance)
-           B - identity (all blocks have the same variance)
-           
-In this model, the genotype effect is nested within the diagonal structure of environments. That means that each environment has its own genetic variance, which seems reasonable, but, this structure assumes that observations from the same genotype in different environments are not correlated, which is a strong assumption.  
+-   **Model 4**
+-   G: block-diagonal (each environment has its own genetic variance,
+    but the genetic effect from different environments are not
+    correlated)
+-   R: block-diagonal (each environment has its own residual variance)
+-   B: identity (all blocks have the same variance)
+
+In this model, the genotype effect is nested within the diagonal
+structure of environments. That means that each environment has its own
+genetic variance, which seems reasonable, but, this structure assumes
+that observations from the same genotype in different environments are
+not correlated, which is a strong assumption.
 
 ```{r}
 #| label: model4
@@ -466,12 +584,19 @@ mod4 <- asreml(
   maxit = 100)
 ```
 
-- **Model 5**: G - Heterogeneous compound symmetry (each environment has its own genetic variance, and there is a uniform correlation that connects genotypes in different environments) 
-           R - block-diagonal (each environment has its own residual variance)
-           B - identity (all blocks have the same variance)
+-   **Model 5**
+-   G: Heterogeneous compound symmetry (each environment has its own
+    genetic variance, and there is a uniform correlation that connects
+    genotypes in different environments)
+-   R: block-diagonal (each environment has its own residual variance)
+-   B: identity (all blocks have the same variance)
 
-In this model, the genotype effect is also nested within environments, which has heterogeneous variances for different environments and uniform correlation between environments. So, genotypes from the same environment have the same genetic variance, and the same genotypes in different environments are connected by a uniform correlation. This also allow the prediction of genotypes at untested environments.
-
+In this model, the genotype effect is also nested within environments,
+which has heterogeneous variances for different environments and uniform
+correlation between environments. So, genotypes from the same
+environment have the same genetic variance, and the same genotypes in
+different environments are connected by a uniform correlation. This also
+allow the prediction of genotypes at untested environments.
 
 ```{r}
 #| label: model5
@@ -485,14 +610,25 @@ mod5 <- asreml(
   maxit = 100)
 ```
 
+-   **Model 6 and 7**
+-   G: Unstructured with heterogeneuous variances (each environment has
+    its own genetic variance, and different correlations connect
+    genotypes of different environments)
+-   R: block-diagonal (each environment has its own residual variance)
+-   B: identity (all blocks have the same variance)
 
-- **Model 6 and 7**: G - Unstructured with heterogeneuous variances (each environment has its own genetic variance, and different correlations connect genotypes of different environments) 
-           R - block-diagonal (each environment has its own residual variance)
-           B - identity (all blocks have the same variance)
+In both models above, the genotype effect is also nested within
+environments, which has heterogeneous variances for different
+environments and a distinct correlation for each pair of environments.
+So, genotypes from the same environment have the same variance, and
+observations from the same genotype in different environments are
+connected by a correlation that is specific to that pair of
+environments. That is different from Model 5, where a single correlation
+value was applied to every pair of environment.
 
-In both models above, the genotype effect is also nested within environments, which has heterogeneous variances for different environments and a distinct correlation for each pair of environments. So, genotypes from the same environment have the same variance, and observations from the same genotype in different environments are connected by a correlation that is specific to that pair of environments. That is different from Model 5, where a single correlation value was applied to every pair of environment.
-
-Although the assumptions of these models are least strong, the variance component estimation did not converge, probably because of the high number of parameters. So we were not able to use **Model 6 and 7**.
+Although the assumptions of these models are least strong, the variance
+component estimation did not converge, probably because of the high
+number of parameters. So we were not able to use **Model 6 and 7**.
 
 ```{r}
 #| label: model6_7
@@ -513,13 +649,30 @@ mod7 <- asreml(
   maxit = 300)
 ```
 
+After model adjustment, the best model was chosen based on AIC, then,
+the predicted values (based on BLUPs) were obtained for
+genotype-environment combinations.
 
+After that, genotype stability was analysed through different indeces:
 
+-   Eberhart & Russel (1966):
+    $Y_{ij} = \mu_{i} + \beta_{1}I_j + \delta_{ij}$
+
+-   AMMI: \$ Y\_{ij}=μ+g_i+e_j+(ge)\_{ij} \$
+
+-   Safety-First (Eskridge, 1990):
+    $SF_i = \hat{g_i} - Z_{1-\alpha} \sqrt{V_i}$
+
+-   Pi Index (Lin & Binns, 1988) \$ P_i =
+    \frac{\sum_{j=1}^{p} \left[ \hat{g}_{ij} - \max(\hat{g}_{j}) \right]^2}{2 \times p}\$
 
 # Resultados
 
 ```{r}
 #| label: aic
+#| fig-cap: "AIC values for different models"
+
+SF_i = \hat{g_i} - Z_{1-\alpha} \sqrt{V_i}
 
 aic1 <- summary(mod1)$aic
 aic2 <- summary(mod2)$aic
@@ -548,16 +701,37 @@ modelos_aic <- data.frame(
 
 ```
 
+Based on the values above, `Model 5` presented the smaller AIC, being
+the model selected for further analysis.
+
+## Modelo 5
+
+```{r}
+#| label: blups_per_env
+#| fig-cap: "Predicted Values in Different Environments"
+
+  pred <- predict.asreml(object = mod5,classify = "gen:env")$pvals
+  
+  pred |>
+    ggplot(aes(x = reorder(env, -predicted.value),
+               y = reorder(gen, predicted.value),
+               fill = predicted.value)) +
+    geom_tile() +
+    theme_minimal(base_size = 12) +
+    theme(legend.position = "right",
+          axis.text.y = element_blank(),
+          axis.ticks.y = element_blank()) + 
+    scale_fill_gradient(low = "#10342d", high = "#b2bc63") +
+    labs(x = "Environment", y = "Genotype", fill = "GY",
+         title = "Predicted Value")
+
+```
 
 ```{r}
 #| label: fig-trajectory
 #| fig-cap: "Environmental Index trajectory of the evaluated locations across years"
 #| warning: false
 #| message: false
-
-library(tidyverse)
-library(ggplot2)
-library(ggrepel)
 
 trajectory_index <- df_filter %>%
   group_by(env, loc, YEAR, RAINFED) %>% 
@@ -596,34 +770,59 @@ ggplot(trajectory_index, aes(x = factor(YEAR), y = index, group = loc)) +
 
 ```
 
-correto #########################################################
+The environmental index exhibited a substantial amplitude, ranging from
+approximately -2,000 kg/ha to +2,300 kg/ha, evidencing a strong
+environmental effect on grain yield across the testing network. The most
+severe stress conditions were recorded in E0107 (2019, Rainfed), which
+presented the lowest index, whereas E0279 (2023) stood out completely
+from the rest as the most favorable environment of the entire network,
+representing a condition of high yield potential. It is also noteworthy
+that the majority of the evaluated environments were concentrated in the
+2023 season.
 
+Analyzing the impact of water regimes over the years reveals a distinct
+temporal pattern. In 2019 and 2020, all trials within the network were
+conducted under rainfed conditions. Remarkably, even without
+supplementary water, several of these early rainfed environments (such
+as E0106, E0176, E0171, E0172, and E0169) managed to achieve positive
+environmental indices. However, a clear shift occurred from 2021
+onwards: no rainfed trial managed to reach a positive index. During this
+later period, positive yield performances became exclusively associated
+with irrigated or supplementary water regimes.
+
+From a location-specific perspective, L074 is uniquely positioned as the
+only location comprising trials across all evaluated years, having
+started with rainfed conditions in its first two seasons. Location L118
+stands out as highly interesting, almost consistently maintaining
+excellent positive indices, with only a minor decrease observed in 2021.
+Conversely, locations L078 and L075 were chronically unfavorable,
+consistently recording negative indices across all their trials.
+Finally, as shown in @fig-trajectory, the frequent crossovers between
+the location lines over the years indicate that environmental rankings
+shift dynamically between seasons, which strongly anticipates the
+presence of a relevant Genotype × Environment (G×E) interaction in the
+network.
 
 ```{r}
 #| label: fig-eberhart-russell
 #| fig-cap: "Eberhart and Russell (1966) regression analysis"
-#| 
-# 1. Run the Eberhart-Russell model
+
 ERm <- metan::ge_reg(
-  .data   = df_filter,          
+  .data   = droplevels(df_filter), 
   env     = "env",
   gen     = "gen",
   rep     = "rep",
   resp    = "GY",
-  verbose = FALSE
-)
+  verbose = FALSE)
 
-# 2. Select the top 30 genotypes with the highest overall mean (b0)
 top_gen <- ERm$GY$regression |>
   arrange(desc(b0)) |>
   slice(1:30) |> 
   pull(GEN) |>
   as.character()
 
-# 3. Force genotype G318 into the plot (if not already in the top 30)
 top_gen <- unique(c(top_gen, "G318"))
 
-# 4. Plot the regression lines
 ggplot(data = subset(ERm$GY$data, GEN %in% top_gen),
        aes(x = IndAmb, y = Y)) +
   facet_wrap(. ~ GEN) +
@@ -638,6 +837,111 @@ ggplot(data = subset(ERm$GY$data, GEN %in% top_gen),
   stat_regline_equation()
 ```
 
+As illustrated in @fig-eberhart-russell, the Eberhart and Russell
+regression model was applied to assess the adaptability and phenotypic
+stability of the top 30 highest-yielding genotypes. While this
+methodology provides valuable insights into how genotypes respond to
+environmental variations, a critical examination of the data reveals a
+significant methodological limitation regarding the number of testing
+environments.
+
+A importat statistical artifact is present among several genotypes that
+were selected in this top 30 productivity ranking, specifically G114,
+G115, G191, G300, G317, G322, and G324. These materials were evaluated
+in only two environments. Mathematically, a linear regression line will
+always perfectly connect two points. Consequently, there is no
+dispersion around the line, meaning the deviation from regression
+($S^2_{di}$) equals zero by definition. Although this perfect fit might
+falsely suggest flawless phenotypic stability, it is entirely a
+mathematical artifact resulting from a lack of degrees of freedom,
+rather than true biological resilience. Furthermore, this artifact
+heavily distorts the estimation of their regression parameters,
+generating unrealistic mean yields ($\beta_0$) and extreme slopes, such
+as the artificially inflated responsiveness of G191 ($\beta_1 = 10$).
+
+In contrast, evaluating genotypes across a robust multi-environment
+network captures the genuine biological complexity of G×E interactions.
+Genotype G244, which is one of the most extensively tested materials in
+the network, clearly demonstrates this reality. Despite maintaining a
+competitive mean yield ($\beta_0 = 2700$ kg/ha), its data points are
+widely scattered around the regression line. This substantial dispersion
+indicates high unpredictability and a significant interaction with
+specific environmental factors that are not linearly explained by the
+environmental index.
+
+Genotypes such as G335, G365, and G310 present a large number of data
+points that closely follow their respective regression lines, proving
+that high predictability is biologically attainable when adequately
+tested.
+
+```{r}
+#| label: fig-ammi-biplots
+#| fig-cap: "AMMI1 (Mean Yield vs. PC1) and AMMI2 (PC1 vs. PC2) biplots for grain yield across evaluated environments."
+#| warning: false
+#| message: false
+#| fig-width: 12
+#| fig-height: 6
+
+df_ammi <- droplevels(df_filter)
+
+media_geral <- mean(df_ammi$GY, na.rm = TRUE)
+
+medias_env <- df_ammi |>
+  group_by(env) |>
+  summarise(efeito_env = mean(GY, na.rm = TRUE) - media_geral, .groups = "drop")
+
+medias_gen <- df_ammi |>
+  group_by(gen) |>
+  summarise(efeito_gen = mean(GY, na.rm = TRUE) - media_geral, .groups = "drop")
+
+dat_ammi_completo <- df_ammi |>
+  tidyr::complete(env, gen, rep) |>
+  left_join(medias_env, by = "env") |>
+  left_join(medias_gen, by = "gen") |>
+  mutate(
+    efeito_gen = ifelse(is.na(efeito_gen), 0, efeito_gen),
+    efeito_env = ifelse(is.na(efeito_env), 0, efeito_env),
+    
+    GY = ifelse(is.na(GY), media_geral + efeito_env + efeito_gen, GY),
+    
+    GY = ifelse(is.na(GY), media_geral, GY)
+  ) |>
+  select(env, gen, rep, GY)
+
+ammi <- metan::performs_ammi(
+  .data = dat_ammi_completo,
+  env   = "env",
+  gen   = "gen",
+  rep   = "rep",
+  resp  = "GY",
+  verbose = FALSE
+)
+
+p_ammi1 <- plot_scores(ammi, type = 1, title = FALSE) +
+  labs(title = "A) AMMI 1: Productivity vs. Stability",
+       x = "Mean Grain Yield", 
+       y = "PC 1") +
+  theme_minimal(base_size = 14) +
+  theme(legend.position = "bottom")
+
+p_ammi2 <- plot_scores(ammi, type = 2, title = FALSE) +
+  labs(title = "B) AMMI 2: GxE Interaction Map",
+       x = "PC 1", 
+       y = "PC 2") +
+  theme_minimal(base_size = 14) +
+  theme(legend.position = "bottom")
+
+p_ammi1 + p_ammi2
+```
+A strict mathematical of AMMI algorithm is the requirement of a completely balanced two-way classification matrix. Since multi-environment agricultural trials are inherently unbalanced due to localized entries and missing plots, data imputation was performed prior to the analysis. Missing cells were predicted using an additive main effects framework ($Y_{ij} = \mu + G_i + E_j$). This strategy  preserved the network's connectivity and allowed the AMMI model to converge without discarding partially evaluated genotypes or environments. 
+
+The multiplicative interaction analysis revealed that the first principal component (PC1) explained 28.1% of the G×E interaction variance, while the second component (PC2) captured 15.7%, accounting for a cumulative total of 43.8% of the interaction sum of squares.In the AMMI1 biplot (@fig-ammi-biplots A), environment E0279 stood out as the most productive environment in the entire network, exhibiting a high mean yield ceiling combined with moderate interaction scores. Conversely, environments E0227 and E0229 displayed the most extreme scores along the PC1 axis, indicating that these environments exert the strongest forces in altering genotypic rankings relative to the rest of the network. Regarding genotypic performance, G191, G115, and G069 combined high mean grain yields with PC1 scores close to zero, which traditionally suggests a profile of broad adaptability. 
+
+However, this pattern must be interpreted with caution. As previously identified in the regression analysis, genotypes such as G191 and G115 were evaluated in only two environments. Because their missing data points were filled using the additive main effects model (which inherently assumes an interaction deviation of zero) their coordinates were artificially dragged toward the biplot origin ($PC1 \approx 0$). Therefore, their apparent stability represents a mathematical artifact of the imputation process on sparse data rather than true biological buffering. In contrast, the group formed by G307, G310, G342, and G335 represents extensively tested materials that consistently achieved grain yields above 2,500 kg/ha with low interaction scores, consolidating them as truly robust candidates for stable performance across the network. 
+
+The AMMI2 biplot (@fig-ammi-biplots B) provided a multidimensional mapping of the interaction, revealing three distinct mega-environments based on the spatial clustering of environmental vectors:(i) High-Potential Managed Network: Environments E0279, E0278, and E0284 grouped tightly in the top-right quadrant, representing favorable conditions under irrigation or supplementary water regimes. Genotypes G137, G057, and G143 displayed strong specific adaptability to this cluster, marking them as ideal candidates for high-investment systems.(ii) High-Yielding Unique Interaction: Environment E0229 isolated itself on the left side of the axis, showcasing a unique interaction profile despite its high mean productivity.(iii) Unfavorable Network: Environments E0227, E0252, and E0253 clustered in the lower quadrants, forming a group of lower-yielding environments with distinct interaction patterns. Genotypes located near the tips of these vectors (such as G245 and G194 towards E0253) express specific affinity for these narrower conditions.
+
+Finally, the central core of the AMMI2 biplot near the origin contains a dense cluster of genotypes, prominently including G307, G310, G342, and G263. Their proximity to the intersection of both interaction axes confirms their stable performance across both multiplicative dimensions, reinforcing their high predictability and broad agronomic buffering across the multi-environment network.
 
 ```{r}
 media_geral <- mean(df_filter$GY, na.rm = TRUE)
@@ -675,8 +979,6 @@ plot(ammi, type = "AMMI2")
 
 ```
 
-
-
 ```{r}
 
 index <- data.frame(
@@ -700,81 +1002,6 @@ ggplot() +
   scale_colour_manual(values = c("firebrick","forestgreen")) +
   scale_fill_manual(values = c("firebrick","forestgreen"))
 
-# ------------------------------------------------------------------------------
-# 3. REGRESSÃO DE EBERHART-RUSSELL
-# ------------------------------------------------------------------------------
-
-media_geral <- mean(df_filter$GY, na.rm = TRUE)
-
-medias_env <- df_filter |>
-  group_by(env) |>
-  summarise(efeito_env = mean(GY, na.rm = TRUE) - media_geral, .groups = "drop")
-
-medias_gen <- df_filter |>
-  group_by(gen) |>
-  summarise(efeito_gen = mean(GY, na.rm = TRUE) - media_geral, .groups = "drop")
-
-dat_ammi_completo <- df_filter |>
-  tidyr::complete(env, gen, rep) |>
-  left_join(medias_env, by = "env") |>
-  left_join(medias_gen, by = "gen") |>
-  mutate(
-    # Se o GY for NA, preenche com o modelo aditivo; caso contrário, mantém o GY real
-    GY = ifelse(is.na(GY), media_geral + efeito_env + efeito_gen, GY)
-  ) |>
-  select(env, gen, rep, GY) # Manter apenas as colunas necessárias
-
-
-ERm <- metan::ge_reg(
-  .data   = dat_ammi_completo,          
-  env     = "env",
-  gen     = "gen",
-  rep     = "rep",
-  resp    = "GY",
-  verbose = FALSE
-)
-
-
-
-# Selecionar os genótipos com maior média geral (b0)
-top_gen <- ERm$GY$regression |>
-  arrange(desc(b0)) |>
-  slice(1:30) |> #dá para mudar os 30
-  pull(GEN) |>
-  as.character()
-
-#mantém os genótipos mesmo que ná esteja em todos os ambientes?
-
-ggplot(data = subset(ERm$GY$data, GEN %in% top_gen),
-       aes(x = IndAmb, y = Y)) +
-  facet_wrap(. ~ GEN) +
-  geom_smooth(method = "lm", formula = y ~ x, se = FALSE, colour = "#10342d") +
-  geom_point(aes(colour = ENV), size = 2) +
-  theme_bw(base_size = 14) +
-  geom_vline(xintercept = 0, linetype = "dotted") +
-  labs(x = "Índice Ambiental", y = "Produtividade (GY)", colour = "Ambiente") +
-  scale_color_viridis_d(option = "turbo") +
-  stat_regline_equation()
-
-
-
-melhor_mod <- mod5 # o model 5 teve o menor AIC
-  
-  pred <- predict.asreml(object = melhor_mod,classify = "gen:env")$pvals
-  
-  pred |>
-    ggplot(aes(x = reorder(env, -predicted.value),
-               y = reorder(gen, predicted.value),
-               fill = predicted.value)) +
-    geom_tile() +
-    theme_minimal(base_size = 12) +
-    theme(legend.position = "right",
-          axis.text.y = element_blank(),
-          axis.ticks.y = element_blank()) + 
-    scale_fill_gradient(low = "#10342d", high = "#b2bc63") +
-    labs(x = "Ambiente", y = "Genótipo", fill = "GY",
-         title = "Valores preditos — Genótipo × Ambiente")
-  
   
   media_geral <- mean(df_filter$GY, na.rm = TRUE)
 
@@ -809,53 +1036,8 @@ ggarrange(plot_scores(ammi, type = 1), plot_scores(ammi, type = 2))
 plot(ammi, type = "AMMI1")
 plot(ammi, type = "AMMI2")
   
-  # ------------------------------------------------------------------------------
-  # 8. ÍNDICES DE ESTABILIDADE 
-  # ------------------------------------------------------------------------------
-  
-  ge_table <- pred[, c("gen", "env", "predicted.value")] |>
-    pivot_wider(names_from = "env", values_from = "predicted.value") |>
-    column_to_rownames("gen")
-  
-  # -- Índice Pi (Lin & Binns) --
-  Pi <- apply(ge_table, 1, function(x) {
-    sum((x - apply(ge_table, 2, max))^2) / (2 * ncol(ge_table))
-  })
-  
-  df_Pi <- data.frame(gen = names(Pi), Pi = Pi) |>
-    arrange(Pi) |>
-    slice(1:15) #top 15
-  
-  ggplot(data = df_Pi, aes(x = reorder(gen, Pi), y = Pi)) +
-    geom_col(colour = "black", aes(fill = Pi)) +
-    scale_fill_gradient(high = "#10342d", low = "#b2bc63") +
-    theme_minimal(base_size = 13) +
-    theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
-          legend.position = "none") +
-    labs(y = expression(P[i]), x = "Genótipo",
-         title = "Top 15 - Índice Pi (Lin & Binns)")
-  
-  # -- Safety-First Index--
-  alpha <- 0.10
-  SF <- apply(ge_table, 1, function(x) mean(x) - qnorm(1 - alpha) * sd(x))
-  
-  df_SF <- data.frame(gen = names(SF), SF = SF) |>
-    arrange(desc(SF)) |>
-    slice(1:15)
-  
-  ggplot(data = df_SF, aes(x = reorder(gen, -SF), y = SF)) +
-    geom_col(colour = "black", aes(fill = SF)) +
-    scale_fill_gradient(low = "#10342d", high = "#b2bc63") +
-    theme_classic(base_size = 13) +
-    theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
-          legend.position = "none") +
-    labs(y = "Safety-First Index", x = "Genótipo",
-         title = "Top 15 - Safety-First (Kataoka)")
   
 
-```
-
-```{r}
 
   ###########################
   # Genotypes
@@ -901,16 +1083,11 @@ plot(ammi, type = "AMMI2")
   
 ```
 
-
-
 ```{r}
  
   # ------------------------------------------------------------------------------
   # 10. RELIABILITY DE CADA GENÓTIPO EM CADA ENV
   # ------------------------------------------------------------------------------
-  library(dplyr)
-  library(asreml)
-  
   
   # preds <- predict(mod5, classify = "env:gen", sed = TRUE, pworkspace = "8000mb")
   
@@ -991,9 +1168,6 @@ plot(ammi, type = "AMMI2")
     )
   
 
-  library(dplyr)
-  library(ggplot2)
-  
   # Genótipos de interesse
   gen_red <- c("G342", "G138")
   
@@ -1052,34 +1226,28 @@ plot(ammi, type = "AMMI2")
     ) +
     coord_cartesian(clip = "off") +  # evita cortar o texto que fica abaixo do eixo
     theme(plot.margin = margin(b = 20))  # espaço extra abaixo do gráfico
-
 ```
 
 
-```{r}
 
-  #################
-  # Sequeiro
-  library(tidyverse)
-  
-  seq_pred <- pred |>
-    filter(env %in% c("E0103","E0104","E0105","E0106","E0107","E0108",
-                      "E0169","E0170","E0171","E0172","E0173","E0174",
-                      "E0175","E0176"))
-  
-  
-  ge_table <- seq_pred[, c("gen", "env", "predicted.value")] |>
+# # Bruna Certo
+
+```{r}
+#| label: fig-pi_index
+#| fig-cap: "Cálculo do Índice Pi (Top 15 Genótipos) para os diferentes ambientes"
+#| warning: false
+#| message: false
+
+  ge_table <- pred[, c("gen", "env", "predicted.value")] |>
     pivot_wider(names_from = "env", values_from = "predicted.value") |>
     column_to_rownames("gen")
   
-  # -- Índice Pi (Lin & Binns) --
   Pi <- apply(ge_table, 1, function(x) {
-    sum((x - apply(ge_table, 2, max))^2) / (2 * ncol(ge_table))
-  })
+    sum((x - apply(ge_table, 2, max))^2) / (2 * ncol(ge_table))})
   
   df_Pi <- data.frame(gen = names(Pi), Pi = Pi) |>
     arrange(Pi) |>
-    slice(1:15) #top 15
+    slice(1:15)
   
   ggplot(data = df_Pi, aes(x = reorder(gen, Pi), y = Pi)) +
     geom_col(colour = "black", aes(fill = Pi)) +
@@ -1088,14 +1256,91 @@ plot(ammi, type = "AMMI2")
     theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
           legend.position = "none") +
     labs(y = expression(P[i]), x = "Genótipo",
-         title = "Top 15 - Índice Pi (Lin & Binns)")
-  
-  # -- Safety-First Index (Kataoka) --
+         title = "Índice Pi (Lin & Binns)")
+```
+
+```{r}
+#| label: fig-sf_index
+#| fig-cap: "Cálculo do Safety First (Top 15 Genótipos) para os diferentes ambientes"
+#| warning: false
+#| message: false
+
   alpha <- 0.10
   SF <- apply(ge_table, 1, function(x) mean(x) - qnorm(1 - alpha) * sd(x))
   
   df_SF <- data.frame(gen = names(SF), SF = SF) |>
     arrange(desc(SF)) |>
     slice(1:15)
+  
+  ggplot(data = df_SF, aes(x = reorder(gen, -SF), y = SF)) +
+    geom_col(colour = "black", aes(fill = SF)) +
+    scale_fill_gradient(low = "#10342d", high = "#b2bc63") +
+    theme_classic(base_size = 13) +
+    theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1),
+          legend.position = "none") +
+    labs(y = "Índice Calculado", x = "Genótipo",
+         title = "Indíce Safety-First")
 ```
 
+```{r}
+#| label: fig-env_con
+#| fig-cap: "Genotypes Presence on Different Environments"
+
+table_connect <- table(as.character(df$env), as.character(df$gen))
+table_connect[table_connect > 0] <- 1
+table_connect <- as.data.frame(table_connect)
+
+df_water <- df %>% 
+  distinct(env, RAINFED) %>% 
+  rename(Var1 = env) 
+
+table_connect <- merge(table_connect, df_water, by = "Var1", all.x = TRUE)
+table_connect$Status <- ifelse(table_connect$Freq == 0, "Absence", as.character(table_connect$RAINFED))
+conect_perc <- tapply(table_connect$Freq, table_connect$Var2, sum) / length(unique(df_filter$env)) * 100
+
+conect_perc <- data.frame(
+  Genótipo = names(conect_perc),
+  Conectividade = conect_perc
+)
+
+conect_perc <- conect_perc[order(conect_perc$Conectividade, decreasing = TRUE), ]
+
+kable(
+  conect_perc,
+  caption = "Connectivity of genotypes across experiments",
+  align = "c"
+)
+
+table_connect$Var2 <- factor(as.character(table_connect$Var2), levels = conect_perc$Genótipo)
+ordem_env <- names(sort(tapply(table_connect$Freq, table_connect$Var1, sum), decreasing = TRUE))
+table_connect$Var1 <- factor(as.character(table_connect$Var1), levels = ordem_env)
+
+genotipos_alvo <- c("G342", "G138") 
+niveis_genotipos <- levels(table_connect$Var2)
+rotulos_customizados <- ifelse(niveis_genotipos %in% genotipos_alvo, niveis_genotipos, "")
+cores_eixo_x <- ifelse(niveis_genotipos %in% genotipos_alvo, "red", "black")
+ggplot(table_connect, aes(x = Var2, y = Var1, fill = Status)) +
+  geom_tile() +
+  scale_fill_manual(
+    values = c(
+      "Absence"       = "white", 
+      "Irrigation"    = "#1b4332",  
+      "Supplementary" = "#40916c",  
+      "Rainfed"       = "#95d5b2"   
+    )
+  ) +
+  scale_x_discrete(labels = rotulos_customizados) + 
+  labs(
+    title = "Presence–absence of treatments across experiments by water regime",
+    x = "Genotypes",
+    y = "Environments",
+    fill = "Water Regime"
+  ) +
+  theme_minimal() + 
+  theme(
+  
+    axis.text.x = element_text(color = cores_eixo_x, angle = 90, vjust = 0.5, hjust = 1, size = 8, face = "bold"),
+    axis.ticks.x = element_line(color = ifelse(rotulos_customizados == "", NA, "gray")), 
+    panel.grid = element_blank() 
+  )
+```
