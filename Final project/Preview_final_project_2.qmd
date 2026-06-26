@@ -178,10 +178,9 @@ First, we performed some exploratory data analysis
 ([details](https://htmlpreview.github.io/?https://github.com/morenobm/statistical-genetics-I/blob/main/Final%20project/Multi%20Trial%20EDA.html))
 
 In this step, potential outliers were identified as values more than
-three standard deviations from the mean @fig-ou
-
-These values were analysed to verify if they were agronomically
-consistent before removing them.
+three standard deviations from the mean @fig-outliers . These values
+were analysed to verify if they were agronomically consistent before
+removing them.
 
 ```{r}
 #| label: fig-outliers
@@ -238,23 +237,23 @@ df$gen <- as.factor(df$gen)
 df$RAINFED <- as.factor(df$RAINFED)
 ```
 
-# Single Trial - Statistical Model
+## Single Trial Analysis
 
-Then, each trial was analysed separately, to have a better understanding
-of the aspects related to the quality of the data collected in each
-trial. This was done by analysing the broad-sense heritability ($H^{2}$)
-and the coefficient of variation ($CV%$).
+After that, each trial was analysed separately, to have a better
+understanding of the aspects related to the quality of the data
+collected in each trial. This was done by analysing the broad-sense
+heritability ($H^{2}$) and the significance of the genetic variance by
+LRT test
+([details](https://htmlpreview.github.io/?https://github.com/morenobm/statistical-genetics-I/blob/main/Final%20project/data_analysis_RCBD.html#summary-of-grain-yield-model-analysis))
 
 Within each trial (RCBD) there are 3 blocks and approximately 30
-genotypes, and for both traits analysed, the statistical model used is
-describe as follow:
+genotypes, and the statistical model used is describe as follows:
 
 $$y_{ij}=\mu +b_{j}+g_{i}+e_{ij}$$
 
 Where:
 
-$b_{j}$ is the block fixed effects, as there are only 3 blocks within
-each experiment.
+$b_{j}$ is the block fixed effects
 
 $g_{i}$ is the genotype's random effects, where
 $g_i \sim N(0, \sigma^2_g)$. This was decided due to the unbalanced
@@ -264,19 +263,21 @@ $e_{ij}$ is the residual random effect, where
 $e_{ij} \sim N(0, \sigma^2_e)$. That is, assuming indepedence of
 residuals within trials
 
-As most trials are completely balanced, the broad-sense heritability was
-estimated as:
+The broad-sense heritability was estimated in three different ways,
+being the last, more appropriate for unbalanced scenarios:
 
--   individual/plot level:
-    $H² = \frac{\sigma²_g}{ \sigma²_g + \sigma²_e}$,
--   genotype level:
+-   Individual/plot level:
+    $H² = \frac{\sigma²_g}{ \sigma²_g + \sigma²_e}$
+
+-   Genotype level:
     $H² = \frac{\sigma²_g}{ \sigma²_g + \frac{\sigma^2_e}{3}}$
--   Cullis, 2006: \$ H\^2 = 1 - \frac{\bar{SED^2}}{2\sigma²_g}\$
 
-# Trait - Grain Yield
+-   Cullis, 2006: $H^2 = 1 - \frac{\bar{SED^2}}{2\sigma²_g}$
 
 ```{r}
-#| label: GY_missing_data
+#| label: single_trial_analysis
+#| output: false
+#| results: false
 
 # Lista de ambientes
 envs_list <- unique(as.character(df$env))
@@ -288,11 +289,6 @@ info_env_GH <- df |>
     obs = n(),
     NAs = sum(is.na(GY)),
     .groups = "drop")
-```
-
-```{r}
-#| label: GY_analysis
-#| output: false
 
 # Rodando para cada trial isoladamente
 singleTrial_models_GY <- list()
@@ -356,55 +352,6 @@ for (i in envs_list){
 ```
 
 ```{r}
-#| label: tbl-single_trial
-#| output: false
-
-tabela_geral_GY |>
-  mutate(
-    highlight = env %in% c("E0108", "E0175","E0224", "E0280", "E0281", "E0285")) |> 
-  gt(rowname_col = "env") |>
-  tab_header(
-    title = "Single-trial analysis for grain yield"
-  ) |>
-  tab_style(
-    style = cell_fill(color = "#e8f5e9"),
-    locations = cells_body(
-      rows = highlight == TRUE
-    )
-  ) |>
-  cols_hide(
-    columns = c(significance, highlight)
-  ) |>
-  cols_label(
-    LRTstat = "LRT",
-    pvalue = "P-value",
-    h2_plot = html("H<sup>2</sup><sub>plot</sub>"),
-    h2_gen = html("H<sup>2</sup><sub>genotype</sub>"),
-    h2_cullis = html("H<sup>2</sup><sub>Cullis</sub>"),
-    cv = "CV (%)"
-  ) |>
-  fmt_number(
-    columns = c(LRTstat, pvalue, h2_plot, h2_gen, h2_cullis, cv),
-    decimals = 4
-  ) |>
-  cols_align(
-    align = "center",
-    columns = everything()
-  ) |>
-  tab_options(
-    table.font.size = px(12),
-    table.width = pct(100)
-  )
-
-```
-
-Based on the LRT and on the heritabilites shown above, the genetic
-variance within environments "E0108", "E0175", "E0224", "E0280",
-"E0281", "E0285" was not significant, meaning that observations from
-this trial have a great portion of noise. Because of this, these trials
-were removed from the multi-environment analysis.
-
-```{r}
 #| label: env_filter
 
 # Removing envs "E0108", "E0175","E0224", "E0280", "E0281", "E0285"
@@ -442,35 +389,10 @@ env_year_table |>
   )
 ```
 
-```{r}
-#| label: fig-blup_by_envs_plots_GY
-
-blup_all_GY <- bind_rows(
-  lapply(names(singleTrial_blup_GY), function(env){
-    df <- singleTrial_blup_GY[[env]]
-    df$env <- env
-    return(df)}))
-
-ggplot(blup_all_GY,
-       aes(x = env, y = predicted.value, group = gen, color = gen)) +
-      geom_line(alpha = 0.3) +
-      geom_point(size = 1) +
-      theme_minimal() +
-      labs(x = "Environment", y = "Predicted BLUP (GY)",
-        title = "2019 - 2023 Genotype's Predicted Values Across Diferent Environments") +
-      theme(axis.text.x = element_text(angle = 45, hjust = 1),legend.position = "none")
-```
-
-The fluctuation in the top-ranking positions highlights the presence of
-a strong Genotype by Environment (GxE) interaction (cross-over patterns)
-@fig-blup_by_envs_plots_GY. Due to this interaction pattern, we will
-proceed to a multi-environment analysis, aiming to asses genotypes with
-higher stability for the locals considered.
-
-# Multi-trial - Statistical Model
+## Multi-trial - Statistical Model
 
 To analyze genotypes performance in different environments, the
-following mixed model will be used. The inicial version of the model is:
+following mixed model was used. The inicial version of the model is:
 
 $$\mathbf{y}= \mathbf{1}\mu + \mathbf{Z}_1\mathbf{e} + \mathbf{Z}_2\mathbf{b}  + \mathbf{Z}_3\mathbf{g} + \varepsilon $$
 
@@ -489,10 +411,10 @@ $\mathbf{g} \sim N(0,\sigma^2_g\mathbf{G})$
 $\mathbf{\varepsilon}$ is the residual random effect, with
 $\mathbf{\varepsilon} \sim N(0,\sigma^2_e\mathbf{R})$
 
-Different (co)variances structures will be tested for the random effects
-in these models. Each one of the models make different assumptions
-regarding the residuals, block or genetic random distribution. First, we
-will analyse the residuals covariance matrix, then blocks and finally
+Different (co)variances structures were tested for the random effects in
+these models. Each one of the models make different assumptions
+regarding the residuals, block or genetic random distribution. First,
+the residuals covariance matrix was analysed, then blocks and finally
 the covariance matrix of genetic effects.
 
 -   **Model 1**
@@ -540,12 +462,12 @@ mod2 <- asreml(
   maxit = 100)
 ```
 
-As in this dataset there is no information about the position of the
-plots in the field, we are not capable of doing the classical spatial
-corrections, so these will be the only structures considered in the
+As in this dataset there was no information about the position of the
+plots in the field, we were not capable of doing classical spatial
+corrections, so these were the only structures considered in the
 covariance matrix R.
 
-Now, we will analyse the block covariance matrix:
+Now, block covariance matrix was analysed:
 
 -   **Model 3**
 -   G:compound symmetry (all genotypes have the same variances and the
@@ -565,7 +487,7 @@ mod3 <- asreml(
   maxit = 100)
 ```
 
-Now, the genetic part will be analysed.
+Now, the genetic part was analysed.
 
 -   **Model 4**
 -   G: block-diagonal (each environment has its own genetic variance,
@@ -621,7 +543,7 @@ mod5 <- asreml(
 -   **Model 6 and 7**
 -   G: Unstructured with heterogeneuous variances (each environment has
     its own genetic variance, and different correlations connect
-    genotypes of different environments)
+    genotypes of differen
 -   R: block-diagonal (each environment has its own residual variance)
 -   B: identity (all blocks have the same variance)
 
@@ -661,7 +583,7 @@ After model adjustment, the best model was chosen based on AIC, then,
 the predicted values (based on BLUPs) were obtained for
 genotype-environment combinations.
 
-After that, genotype stability was analysed through different indeces:
+Finally, genotypes' stabilities were analysed through different indeces:
 
 -   Eberhart & Russel (1966):
     $Y_{ij} = \mu_{i} + \beta_{1}I_j + \delta_{ij}$
@@ -671,16 +593,94 @@ After that, genotype stability was analysed through different indeces:
 -   Safety-First (Eskridge, 1990):
     $SF_i = \hat{g_i} - Z_{1-\alpha} \sqrt{V_i}$
 
--   Pi Index (Lin & Binns, 1988) \$ P_i =
+-   Pi-Index (Lin & Binns, 1988) \$ P_i =
     \frac{\sum_{j=1}^{p} \left[ \hat{g}_{ij} - \max(\hat{g}_{j}) \right]^2}{2 \times p}\$
 
-# Resultados
+The first two indeces are classical methods based on regression/ANOVA
+methods, so, they are not the best approaches to deal with unbalanced
+data. They were used to analyse if they would provide a general
+concordance with the last two indeces. Safety-First and Pi-Index, were
+used to make a decision regarding the cultivar selection, as they are
+based on our BLUP predictions.
+
+# Results/Discussion
+
+```{r}
+#| label: tbl-single_trial
+#| output: false
+
+tabela_geral_GY |>
+  mutate(
+    highlight = env %in% c("E0108", "E0175","E0224", "E0280", "E0281", "E0285")) |> 
+  gt(rowname_col = "env") |>
+  tab_header(
+    title = "Single-trial analysis for grain yield"
+  ) |>
+  tab_style(
+    style = cell_fill(color = "#e8f5e9"),
+    locations = cells_body(
+      rows = highlight == TRUE
+    )
+  ) |>
+  cols_hide(
+    columns = c(significance, highlight)
+  ) |>
+  cols_label(
+    LRTstat = "LRT",
+    pvalue = "P-value",
+    h2_plot = html("H<sup>2</sup><sub>plot</sub>"),
+    h2_gen = html("H<sup>2</sup><sub>genotype</sub>"),
+    h2_cullis = html("H<sup>2</sup><sub>Cullis</sub>"),
+    cv = "CV (%)"
+  ) |>
+  fmt_number(
+    columns = c(LRTstat, pvalue, h2_plot, h2_gen, h2_cullis, cv),
+    decimals = 4
+  ) |>
+  cols_align(
+    align = "center",
+    columns = everything()
+  ) |>
+  tab_options(
+    table.font.size = px(12),
+    table.width = pct(100)
+  )
+```
+
+Based on the LRT and on the heritabilites shown above, the genetic
+variance within environments "E0108", "E0175", "E0224", "E0280",
+"E0281", "E0285" was not significant, meaning that observations from
+this trial have a great portion of noise. Because of this, these trials
+were removed from the multi-environment analysis.
+
+```{r}
+#| label: fig-blup_by_envs_plots_GY
+
+blup_all_GY <- bind_rows(
+  lapply(names(singleTrial_blup_GY), function(env){
+    df <- singleTrial_blup_GY[[env]]
+    df$env <- env
+    return(df)}))
+
+ggplot(blup_all_GY,
+       aes(x = env, y = predicted.value, group = gen, color = gen)) +
+      geom_line(alpha = 0.3) +
+      geom_point(size = 1) +
+      theme_minimal() +
+      labs(x = "Environment", y = "Predicted BLUP (GY)",
+        title = "2019 - 2023 Genotype's Predicted Values Across Diferent Environments") +
+      theme(axis.text.x = element_text(angle = 45, hjust = 1),legend.position = "none")
+```
+
+The fluctuation in the top-ranking positions highlights the presence of
+a strong Genotype by Environment (GxE) interaction (cross-over patterns)
+@fig-blup_by_envs_plots_GY. Due to this interaction pattern, we will
+proceed to a multi-environment analysis, aiming to asses genotypes with
+higher stability for the locals considered.
 
 ```{r}
 #| label: aic
 #| fig-cap: "AIC values for different models"
-
-SF_i = \hat{g_i} - Z_{1-\alpha} \sqrt{V_i}
 
 aic1 <- summary(mod1)$aic
 aic2 <- summary(mod2)$aic
@@ -843,77 +843,6 @@ presence of a relevant Genotype × Environment (G×E) interaction in the
 network.
 
 ```{r}
-#| label: fig-eberhart-russell
-#| fig-cap: "Eberhart and Russell (1966) regression analysis"
-
-ERm <- metan::ge_reg(
-  .data   = droplevels(df_filter), 
-  env     = "env",
-  gen     = "gen",
-  rep     = "rep",
-  resp    = "GY",
-  verbose = FALSE)
-
-top_gen <- ERm$GY$regression |>
-  arrange(desc(b0)) |>
-  slice(1:30) |> 
-  pull(GEN) |>
-  as.character()
-
-top_gen <- unique(c(top_gen, "G318"))
-
-ggplot(data = subset(ERm$GY$data, GEN %in% top_gen),
-       aes(x = IndAmb, y = Y)) +
-  facet_wrap(. ~ GEN) +
-  geom_smooth(method = "lm", formula = y ~ x, se = FALSE, colour = "#10342d") +
-  geom_point(aes(colour = ENV), size = 2) +
-  theme_bw(base_size = 14) +
-  geom_vline(xintercept = 0, linetype = "dotted") +
-  labs(x = "Environmental Index", 
-       y = "Grain Yield (GY)", 
-       colour = "Environment") +
-  scale_color_viridis_d(option = "turbo") +
-  stat_regline_equation()
-```
-
-As illustrated in @fig-eberhart-russell, the Eberhart and Russell
-regression model was applied to assess the adaptability and phenotypic
-stability of the top 30 highest-yielding genotypes. While this
-methodology provides valuable insights into how genotypes respond to
-environmental variations, a critical examination of the data reveals a
-significant methodological limitation regarding the number of testing
-environments.
-
-A importat statistical artifact is present among several genotypes that
-were selected in this top 30 productivity ranking, specifically G114,
-G115, G191, G300, G317, G322, and G324. These materials were evaluated
-in only two environments. Mathematically, a linear regression line will
-always perfectly connect two points. Consequently, there is no
-dispersion around the line, meaning the deviation from regression
-($S^2_{di}$) equals zero by definition. Although this perfect fit might
-falsely suggest flawless phenotypic stability, it is entirely a
-mathematical artifact resulting from a lack of degrees of freedom,
-rather than true biological resilience. Furthermore, this artifact
-heavily distorts the estimation of their regression parameters,
-generating unrealistic mean yields ($\beta_0$) and extreme slopes, such
-as the artificially inflated responsiveness of G191 ($\beta_1 = 10$).
-
-In contrast, evaluating genotypes across a robust multi-environment
-network captures the genuine biological complexity of G×E interactions.
-Genotype G244, which is one of the most extensively tested materials in
-the network, clearly demonstrates this reality. Despite maintaining a
-competitive mean yield ($\beta_0 = 2700$ kg/ha), its data points are
-widely scattered around the regression line. This substantial dispersion
-indicates high unpredictability and a significant interaction with
-specific environmental factors that are not linearly explained by the
-environmental index.
-
-Genotypes such as G335, G365, and G310 present a large number of data
-points that closely follow their respective regression lines, proving
-that high predictability is biologically attainable when adequately
-tested.
-
-```{r}
 #| label: fig-ammi-biplots
 #| fig-cap: "AMMI1 (Mean Yield vs. PC1) and AMMI2 (PC1 vs. PC2) biplots for grain yield across evaluated environments."
 #| warning: false
@@ -1032,6 +961,77 @@ G263. Their proximity to the intersection of both interaction axes
 confirms their stable performance across both multiplicative dimensions,
 reinforcing their high predictability and broad agronomic buffering
 across the multi-environment network.
+
+```{r}
+#| label: fig-eberhart-russell
+#| fig-cap: "Eberhart and Russell (1966) regression analysis"
+
+ERm <- metan::ge_reg(
+  .data   = droplevels(df_filter), 
+  env     = "env",
+  gen     = "gen",
+  rep     = "rep",
+  resp    = "GY",
+  verbose = FALSE)
+
+top_gen <- ERm$GY$regression |>
+  arrange(desc(b0)) |>
+  slice(1:30) |> 
+  pull(GEN) |>
+  as.character()
+
+top_gen <- unique(c(top_gen, "G318"))
+
+ggplot(data = subset(ERm$GY$data, GEN %in% top_gen),
+       aes(x = IndAmb, y = Y)) +
+  facet_wrap(. ~ GEN) +
+  geom_smooth(method = "lm", formula = y ~ x, se = FALSE, colour = "#10342d") +
+  geom_point(aes(colour = ENV), size = 2) +
+  theme_bw(base_size = 14) +
+  geom_vline(xintercept = 0, linetype = "dotted") +
+  labs(x = "Environmental Index", 
+       y = "Grain Yield (GY)", 
+       colour = "Environment") +
+  scale_color_viridis_d(option = "turbo") +
+  stat_regline_equation()
+```
+
+As illustrated in @fig-eberhart-russell, the Eberhart and Russell
+regression model was applied to assess the adaptability and phenotypic
+stability of the top 30 highest-yielding genotypes. While this
+methodology provides valuable insights into how genotypes respond to
+environmental variations, a critical examination of the data reveals a
+significant methodological limitation regarding the number of testing
+environments.
+
+A importat statistical artifact is present among several genotypes that
+were selected in this top 30 productivity ranking, specifically G114,
+G115, G191, G300, G317, G322, and G324. These materials were evaluated
+in only two environments. Mathematically, a linear regression line will
+always perfectly connect two points. Consequently, there is no
+dispersion around the line, meaning the deviation from regression
+($S^2_{di}$) equals zero by definition. Although this perfect fit might
+falsely suggest flawless phenotypic stability, it is entirely a
+mathematical artifact resulting from a lack of degrees of freedom,
+rather than true biological resilience. Furthermore, this artifact
+heavily distorts the estimation of their regression parameters,
+generating unrealistic mean yields ($\beta_0$) and extreme slopes, such
+as the artificially inflated responsiveness of G191 ($\beta_1 = 10$).
+
+In contrast, evaluating genotypes across a robust multi-environment
+network captures the genuine biological complexity of G×E interactions.
+Genotype G244, which is one of the most extensively tested materials in
+the network, clearly demonstrates this reality. Despite maintaining a
+competitive mean yield ($\beta_0 = 2700$ kg/ha), its data points are
+widely scattered around the regression line. This substantial dispersion
+indicates high unpredictability and a significant interaction with
+specific environmental factors that are not linearly explained by the
+environmental index.
+
+Genotypes such as G335, G365, and G310 present a large number of data
+points that closely follow their respective regression lines, proving
+that high predictability is biologically attainable when adequately
+tested.
 
 ```{r}
 #| label: fig-pi_index
@@ -1191,12 +1191,10 @@ being recommended for rainfed systems, where severe water deficits could
 drastically penalize the expression of their yield potential.
 
 ```{r}
- 
-  # ------------------------------------------------------------------------------
-  # 10. RELIABILITY DE CADA GENÓTIPO EM CADA ENV
-  # ------------------------------------------------------------------------------
-  
-  # preds <- predict(mod5, classify = "env:gen", sed = TRUE, pworkspace = "8000mb")
+#| label: fig-reliability
+#| fig-cap: Average reability of the 107 genotypes evaluated in the multi environment trial network in Zambia
+
+  preds <- predict(mod5, classify = "env:gen", sed = TRUE, pworkspace = "8000mb")
   
   tabela_blups <- preds$pvals
   
@@ -1219,24 +1217,21 @@ drastically penalize the expression of their yield potential.
     "E0173" = varcomp[13,1],
     "E0174" = varcomp[14,1],
     "E0176" = varcomp[15,1],
-    "E0224" = varcomp[16,1],
-    "E0225" = varcomp[17,1],
-    "E0226" = varcomp[18,1],
-    "E0227" = varcomp[19,1],
-    "E0228" = varcomp[20,1],
-    "E0229" = varcomp[21,1],
-    "E0230" = varcomp[22,1],
-    "E0252" = varcomp[23,1],
-    "E0253" = varcomp[24,1],
-    "E0254" = varcomp[25,1],
-    "E0255" = varcomp[26,1],
-    "E0278" = varcomp[27,1],
-    "E0279" = varcomp[28,1],
-    "E0280" = varcomp[29,1],
-    "E0281" = varcomp[30,1],
-    "E0282" = varcomp[31,1],
-    "E0283" = varcomp[32,1],
-    "E0284" = varcomp[33,1]
+    "E0225" = varcomp[16,1],
+    "E0226" = varcomp[17,1],
+    "E0227" = varcomp[18,1],
+    "E0228" = varcomp[19,1],
+    "E0229" = varcomp[20,1],
+    "E0230" = varcomp[21,1],
+    "E0252" = varcomp[22,1],
+    "E0253" = varcomp[23,1],
+    "E0254" = varcomp[24,1],
+    "E0255" = varcomp[25,1],
+    "E0278" = varcomp[26,1],
+    "E0279" = varcomp[27,1],
+    "E0282" = varcomp[28,1],
+    "E0283" = varcomp[30,1],
+    "E0284" = varcomp[31,1]
   )
   
   tabela_blups$sigma2_G <- sigma2_G_valores[tabela_blups$env]
@@ -1248,14 +1243,14 @@ drastically penalize the expression of their yield potential.
   resultado_final <- tabela_blups[, c("env", "gen", "predicted.value", "std.error", "Reliability")]
   head(resultado_final)
   
-  mod5_reliability <- readRDS("reability3.rds")
+  #mod5_reliability <- readRDS("reability3.rds")
   
   # Removendo valores negativos
-  mod5_reliability <- mod5_reliability |> filter(Reliability > 0) 
+  resultado_final <- resultado_final |> filter(Reliability > 0) 
   
-  summary(mod5_reliability)
+  summary(resultado_final)
   
-  rel_gen <- mod5_reliability |>
+  rel_gen <- resultado_final |>
     group_by(gen) |>
     summarise(
       mean_reliability = mean(Reliability, na.rm = TRUE),
@@ -1266,7 +1261,7 @@ drastically penalize the expression of their yield potential.
   
   summary(rel_gen$mean_reliability)
   
-  rel_env <- mod5_reliability |>
+  rel_env <- resultado_final |>
     group_by(env) |>
     summarise(
       mean_reliability = mean(Reliability, na.rm = TRUE),
@@ -1279,7 +1274,7 @@ drastically penalize the expression of their yield potential.
   gen_red <- c("G342", "G138")
   
   # Reliability média por genótipo
-  rel_gen <- mod5_reliability |>
+  rel_gen <- resultado_final |>
     group_by(gen) |>
     summarise(
       mean_reliability = mean(Reliability, na.rm = TRUE),
@@ -1291,19 +1286,19 @@ drastically penalize the expression of their yield potential.
   rel_red <- rel_gen |>
     filter(gen %in% gen_red)
   
-  ggplot(rel_gen, aes(x = mean_reliability)) +
-    geom_histogram(bins = 30, fill = "grey70", color = "black") +
-    geom_vline(
-      xintercept = mean(rel_gen$mean_reliability),
-      linetype = "dashed",
-      linewidth = 1
-    ) +
-    geom_vline(
-      data = rel_red,
-      aes(xintercept = mean_reliability),
-      color = "red",
-      linewidth = 1
-    )
+#  ggplot(rel_gen, aes(x = mean_reliability)) +
+#    geom_histogram(bins = 30, fill = "grey70", color = "black") +
+#    geom_vline(
+#      xintercept = mean(rel_gen$mean_reliability),
+#      linetype = "dashed",
+#      linewidth = 1
+#    ) +
+#    geom_vline(
+#      data = rel_red,
+#      aes(xintercept = mean_reliability),
+#      color = "red",
+#      linewidth = 1
+#    )
   
   ggplot(rel_gen, aes(x = mean_reliability)) +
     geom_histogram(bins = 30, fill = "grey70", color = "black") +
@@ -1322,15 +1317,57 @@ drastically penalize the expression of their yield potential.
       data = rel_red,
       aes(x = mean_reliability, y = 0, label = gen),
       color = "red",
-      vjust = 1.5,      # empurra o texto para baixo do eixo x
+      vjust = 1.5,     
       fontface = "bold",
       size = 4
     ) +
     labs(
-      title = "Reliability média dos genótipos nos diferentes ambientes",
-      x = "Reliability média",
-      y = "Frequência"
+      title = "Mean genotype reliability across environments",
+      x = "Mean Reliability",
+      y = "Frequency"
     ) +
-    coord_cartesian(clip = "off") +  # evita cortar o texto que fica abaixo do eixo
-    theme(plot.margin = margin(b = 20))  # espaço extra abaixo do gráfico
+    coord_cartesian(clip = "off") +  
+    theme(plot.margin = margin(b = 20))  
 ```
+
+# Conclusion
+
+The present study aimed to evaluate the phenotypic stability of 107
+soybean genotypes across the Zambian trial network to identify superior
+materials for regional recommendation. The integration of classical
+stability methods (Eberhart & Russell regression and AMMI decomposition)
+with a predictive approach based on linear mixed models via REML/BLUP
+provided a robust and methodologically convergent framework for genotype
+selection.Across practically all analytical approaches, genotype G342
+consistently emerged as the most stable and high-yielding material in
+the network. It combined a competitive mean yield above 2,500 kg/ha with
+low interaction scores in the AMMI biplots, minimal distance to the
+environmental maximum in the $P_i$ index, and high Safety-First values.
+
+However, a examination of its cultivation history revealed that G342 was
+evaluated exclusively under irrigated or supplementary water regimes.
+Therefore, its recommendation must be strictly to high-input, managed
+environments, where irrigation or supplementary water. Conversely, for
+rainfed, water-limited conditions, genotype G138 stood out as the most
+suitable candidate. Having been extensively evaluated under rainfed
+environments, it maintained competitive stability indices and reliable
+performance. Its selection for low-input systems is supported by its
+resilience under the most restrictive conditions present in the network.
+
+This dual recommendation underscores a central biological and agronomic
+finding of this study, broad stability indices alone are insufficient
+for varietal recommendation in highly heterogeneous networks where the
+water regime acts as the primary source of environmental variation.
+Stratification by management condition is essential to prevent the
+misallocation of genotypes optimized for high-input systems into rainfed
+environments, where their yield potential would be severely compromised.
+
+Furthermore, this study highlights the necessity of evolving beyond
+classical stability tools. While methods like Eberhart & Russell and
+AMMI provide valuable descriptive visualizations, their mathematical
+limitations and sensitivity to missing data in highly unbalanced
+networks are evident. The adoption of modern predictive frameworks, such
+as REML/BLUP mixed models, proved to be an important step. These models
+effectively handled the sparse nature of the dataset, shrank
+environmental noise, and provided the accurate breeding values required
+to compute reliable selection indices.
