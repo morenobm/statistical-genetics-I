@@ -237,7 +237,7 @@ df$gen <- as.factor(df$gen)
 df$RAINFED <- as.factor(df$RAINFED)
 ```
 
-## Single Trial Analysis
+## Single-Trial
 
 After that, each trial was analysed separately, to have a better
 understanding of the aspects related to the quality of the data
@@ -389,7 +389,7 @@ env_year_table |>
   )
 ```
 
-## Multi-trial - Statistical Model
+## Multi-trial
 
 To analyze genotypes performance in different environments, the
 following mixed model was used. The inicial version of the model is:
@@ -470,10 +470,11 @@ covariance matrix R.
 Now, block covariance matrix was analysed:
 
 -   **Model 3**
--   G:compound symmetry (all genotypes have the same variances and the
-    same covariances in different environments)
--   R: block-diagonal (each environment has its own residual variance)
--   B: block-diagonal (each environment has its own block variance)
+    -   G:compound symmetry (all genotypes have the same variances and
+        the same covariances in different environments)
+    -   R: block-diagonal (each environment has its own residual
+        variance)
+    -   B: block-diagonal (each environment has its own block variance)
 
 ```{r}
 #| label: model3
@@ -490,11 +491,12 @@ mod3 <- asreml(
 Now, the genetic part was analysed.
 
 -   **Model 4**
--   G: block-diagonal (each environment has its own genetic variance,
-    but the genetic effect from different environments are not
-    correlated)
--   R: block-diagonal (each environment has its own residual variance)
--   B: identity (all blocks have the same variance)
+    -   G: block-diagonal (each environment has its own genetic
+        variance, but the genetic effect from different environments are
+        not correlated)
+    -   R: block-diagonal (each environment has its own residual
+        variance)
+    -   B: identity (all blocks have the same variance)
 
 In this model, the genotype effect is nested within the diagonal
 structure of environments. That means that each environment has its own
@@ -515,11 +517,12 @@ mod4 <- asreml(
 ```
 
 -   **Model 5**
--   G: Heterogeneous compound symmetry (each environment has its own
-    genetic variance, and there is a uniform correlation that connects
-    genotypes in different environments)
--   R: block-diagonal (each environment has its own residual variance)
--   B: identity (all blocks have the same variance)
+    -   G: Heterogeneous compound symmetry (each environment has its own
+        genetic variance, and there is a uniform correlation that
+        connects genotypes in different environments)
+    -   R: block-diagonal (each environment has its own residual
+        variance)
+    -   B: identity (all blocks have the same variance)
 
 In this model, the genotype effect is also nested within environments,
 which has heterogeneous variances for different environments and uniform
@@ -541,11 +544,12 @@ mod5 <- asreml(
 ```
 
 -   **Model 6 and 7**
--   G: Unstructured with heterogeneuous variances (each environment has
-    its own genetic variance, and different correlations connect
-    genotypes of differen
--   R: block-diagonal (each environment has its own residual variance)
--   B: identity (all blocks have the same variance)
+    -   G: Unstructured with heterogeneuous variances (each environment
+        has its own genetic variance, and different correlations connect
+        genotypes of differen
+    -   R: block-diagonal (each environment has its own residual
+        variance)
+    -   B: identity (all blocks have the same variance)
 
 In both models above, the genotype effect is also nested within
 environments, which has heterogeneous variances for different
@@ -588,13 +592,13 @@ Finally, genotypes' stabilities were analysed through different indeces:
 -   Eberhart & Russel (1966):
     $Y_{ij} = \mu_{i} + \beta_{1}I_j + \delta_{ij}$
 
--   AMMI: \$ Y\_{ij}=μ+g_i+e_j+(ge)\_{ij} \$
+-   AMMI: $Y_{ij}=μ+g_i+e_j+(ge)_{ij}$
 
 -   Safety-First (Eskridge, 1990):
     $SF_i = \hat{g_i} - Z_{1-\alpha} \sqrt{V_i}$
 
--   Pi-Index (Lin & Binns, 1988) \$ P_i =
-    \frac{\sum_{j=1}^{p} \left[ \hat{g}_{ij} - \max(\hat{g}_{j}) \right]^2}{2 \times p}\$
+-   Pi-Index (Lin & Binns, 1988):
+    $P_i = \frac{\sum_{j=1}^{p} \left[ \hat{g}_{ij} - \max(\hat{g}_{j}) \right]^2}{2 \times p}$
 
 The first two indeces are classical methods based on regression/ANOVA
 methods, so, they are not the best approaches to deal with unbalanced
@@ -604,6 +608,8 @@ used to make a decision regarding the cultivar selection, as they are
 based on our BLUP predictions.
 
 # Results/Discussion
+
+## Single-Trial
 
 ```{r}
 #| label: tbl-single_trial
@@ -653,6 +659,14 @@ variance within environments "E0108", "E0175", "E0224", "E0280",
 this trial have a great portion of noise. Because of this, these trials
 were removed from the multi-environment analysis.
 
+By our single-trial analysis, it was clear that occurred fluctuations in
+the top-ranking positions in each environment, as it can be seen in
+@fig-blup_by_envs_plots_GY . This aspect highlights the presence of a
+strong Genotype by Environment (GxE) interaction (cross-over patterns).
+Due to this interaction pattern, we will proceed to a multi-environment
+analysis, aiming to asses genotypes with higher stability for the
+environments considered.
+
 ```{r}
 #| label: fig-blup_by_envs_plots_GY
 
@@ -672,14 +686,15 @@ ggplot(blup_all_GY,
       theme(axis.text.x = element_text(angle = 45, hjust = 1),legend.position = "none")
 ```
 
-The fluctuation in the top-ranking positions highlights the presence of
-a strong Genotype by Environment (GxE) interaction (cross-over patterns)
-@fig-blup_by_envs_plots_GY. Due to this interaction pattern, we will
-proceed to a multi-environment analysis, aiming to asses genotypes with
-higher stability for the locals considered.
+## Multi-Trial
+
+In this step, only the 27 filtered environments were considered. By
+analyzing the AIC values in @fig-aic, `Model 5` presented the smaller
+one, being the model selected for all downstream analysis (BLUP
+predictions, stability indeces...)
 
 ```{r}
-#| label: aic
+#| label: fig-aic
 #| fig-cap: "AIC values for different models"
 
 aic1 <- summary(mod1)$aic
@@ -709,11 +724,6 @@ modelos_aic <- data.frame(
 
 ```
 
-Based on the values above, `Model 5` presented the smaller AIC, being
-the model selected for further analysis.
-
-## Modelo 5
-
 ```{r}
 #| label: blups_per_env
 #| fig-cap: "Predicted Values in Different Environments"
@@ -728,6 +738,7 @@ the model selected for further analysis.
     theme_minimal(base_size = 12) +
     theme(legend.position = "right",
           axis.text.y = element_blank(),
+          axis.text.x = element_text(size = 10),
           axis.ticks.y = element_blank()) + 
     scale_fill_gradient(low = "#10342d", high = "#b2bc63") +
     labs(x = "Environment", y = "Genotype", fill = "GY",
@@ -765,6 +776,8 @@ E0107 comprise the uniformly unfavorable block on the right; and E0252,
 E0253, and E0225 display a much more heterogeneous pattern of cells in
 the central-right region, which is entirely consistent with their highly
 distinct interaction profiles.
+
+### Classical Analysis
 
 ```{r}
 #| label: fig-trajectory
@@ -1033,6 +1046,8 @@ points that closely follow their respective regression lines, proving
 that high predictability is biologically attainable when adequately
 tested.
 
+### Mixed Model Indices
+
 ```{r}
 #| label: fig-pi_index
 #| fig-cap: "Cálculo do Índice Pi (Top 15 Genótipos) para os diferentes ambientes"
@@ -1286,20 +1301,6 @@ drastically penalize the expression of their yield potential.
   rel_red <- rel_gen |>
     filter(gen %in% gen_red)
   
-#  ggplot(rel_gen, aes(x = mean_reliability)) +
-#    geom_histogram(bins = 30, fill = "grey70", color = "black") +
-#    geom_vline(
-#      xintercept = mean(rel_gen$mean_reliability),
-#      linetype = "dashed",
-#      linewidth = 1
-#    ) +
-#    geom_vline(
-#      data = rel_red,
-#      aes(xintercept = mean_reliability),
-#      color = "red",
-#      linewidth = 1
-#    )
-  
   ggplot(rel_gen, aes(x = mean_reliability)) +
     geom_histogram(bins = 30, fill = "grey70", color = "black") +
     geom_vline(
@@ -1329,6 +1330,24 @@ drastically penalize the expression of their yield potential.
     coord_cartesian(clip = "off") +  
     theme(plot.margin = margin(b = 20))  
 ```
+
+To assess the precision of the BLUP estimates, the average genotype
+reliability across environments was evaluated (@fig-reliability). The
+overall reliability of the network exhibited a wide distribution,
+centering around 0.40 (dashed line), which is consistent with the
+unbalanced nature of the multi-environment trial design, where not all
+genotypes are evaluated across every location and year. Under such
+conditions, lower overall reliability values are inherently expected.
+Interestingly, the selected genotypes exhibited distinct precision
+profiles (represented by the red lines). Genotype G138 showed a
+reliability of 0.45, which is highly congruent with the fact that it was
+widely tested across 12 environments. Conversely, genotype G342
+presented a slightly lower reliability (0.38). This lower precision for
+G342 is coherent with its previously discussed cultivation history;
+since it was evaluated within a restricted group of environments
+(specifically irrigated trials), the limited number of
+multi-environmental evaluations constrains the model’s capacity to
+predict its genetic value with higher certainty.
 
 # Conclusion
 
