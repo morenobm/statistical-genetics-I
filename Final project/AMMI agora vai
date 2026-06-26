@@ -1,0 +1,72 @@
+```{r}
+#| label: fig-ammi-biplots
+#| fig-cap: "AMMI1 (Mean Yield vs. PC1) and AMMI2 (PC1 vs. PC2) biplots for grain yield across evaluated environments."
+#| warning: false
+#| message: false
+#| fig-width: 12
+#| fig-height: 6
+
+library(tidyverse)
+library(metan)
+library(patchwork)
+
+df_ammi <- droplevels(df_filter)
+
+media_geral <- mean(df_ammi$GY, na.rm = TRUE)
+
+medias_env <- df_ammi |>
+  group_by(env) |>
+  summarise(efeito_env = mean(GY, na.rm = TRUE) - media_geral, .groups = "drop")
+
+medias_gen <- df_ammi |>
+  group_by(gen) |>
+  summarise(efeito_gen = mean(GY, na.rm = TRUE) - media_geral, .groups = "drop")
+
+dat_ammi_completo <- df_ammi |>
+  tidyr::complete(env, gen, rep) |>
+  left_join(medias_env, by = "env") |>
+  left_join(medias_gen, by = "gen") |>
+  mutate(
+    efeito_gen = ifelse(is.na(efeito_gen), 0, efeito_gen),
+    efeito_env = ifelse(is.na(efeito_env), 0, efeito_env),
+    
+    GY = ifelse(is.na(GY), media_geral + efeito_env + efeito_gen, GY),
+    
+    GY = ifelse(is.na(GY), media_geral, GY)
+  ) |>
+  select(env, gen, rep, GY)
+
+ammi <- metan::performs_ammi(
+  .data = dat_ammi_completo,
+  env   = "env",
+  gen   = "gen",
+  rep   = "rep",
+  resp  = "GY",
+  verbose = FALSE
+)
+
+p_ammi1 <- plot_scores(ammi, type = 1, title = FALSE) +
+  labs(title = "A) AMMI 1: Productivity vs. Stability",
+       x = "Mean Grain Yield", 
+       y = "PC 1") +
+  theme_minimal(base_size = 14) +
+  theme(legend.position = "bottom")
+
+p_ammi2 <- plot_scores(ammi, type = 2, title = FALSE) +
+  labs(title = "B) AMMI 2: GxE Interaction Map",
+       x = "PC 1", 
+       y = "PC 2") +
+  theme_minimal(base_size = 14) +
+  theme(legend.position = "bottom")
+
+p_ammi1 + p_ammi2
+```
+A strict mathematical of AMMI algorithm is the requirement of a completely balanced two-way classification matrix. Since multi-environment agricultural trials are inherently unbalanced due to localized entries and missing plots, data imputation was performed prior to the analysis. Missing cells were predicted using an additive main effects framework ($Y_{ij} = \mu + G_i + E_j$). This strategy  preserved the network's connectivity and allowed the AMMI model to converge without discarding partially evaluated genotypes or environments. 
+
+The multiplicative interaction analysis revealed that the first principal component (PC1) explained 28.1% of the G×E interaction variance, while the second component (PC2) captured 15.7%, accounting for a cumulative total of 43.8% of the interaction sum of squares.In the AMMI1 biplot (@fig-ammi-biplots A), environment E0279 stood out as the most productive environment in the entire network, exhibiting a high mean yield ceiling combined with moderate interaction scores. Conversely, environments E0227 and E0229 displayed the most extreme scores along the PC1 axis, indicating that these environments exert the strongest forces in altering genotypic rankings relative to the rest of the network. Regarding genotypic performance, G191, G115, and G069 combined high mean grain yields with PC1 scores close to zero, which traditionally suggests a profile of broad adaptability. 
+
+However, this pattern must be interpreted with caution. As previously identified in the regression analysis, genotypes such as G191 and G115 were evaluated in only two environments. Because their missing data points were filled using the additive main effects model (which inherently assumes an interaction deviation of zero) their coordinates were artificially dragged toward the biplot origin ($PC1 \approx 0$). Therefore, their apparent stability represents a mathematical artifact of the imputation process on sparse data rather than true biological buffering. In contrast, the group formed by G307, G310, G342, and G335 represents extensively tested materials that consistently achieved grain yields above 2,500 kg/ha with low interaction scores, consolidating them as truly robust candidates for stable performance across the network. 
+
+The AMMI2 biplot (@fig-ammi-biplots B) provided a multidimensional mapping of the interaction, revealing three distinct mega-environments based on the spatial clustering of environmental vectors:(i) High-Potential Managed Network: Environments E0279, E0278, and E0284 grouped tightly in the top-right quadrant, representing favorable conditions under irrigation or supplementary water regimes. Genotypes G137, G057, and G143 displayed strong specific adaptability to this cluster, marking them as ideal candidates for high-investment systems.(ii) High-Yielding Unique Interaction: Environment E0229 isolated itself on the left side of the axis, showcasing a unique interaction profile despite its high mean productivity.(iii) Unfavorable Network: Environments E0227, E0252, and E0253 clustered in the lower quadrants, forming a group of lower-yielding environments with distinct interaction patterns. Genotypes located near the tips of these vectors (such as G245 and G194 towards E0253) express specific affinity for these narrower conditions.
+
+Finally, the central core of the AMMI2 biplot near the origin contains a dense cluster of genotypes, prominently including G307, G310, G342, and G263. Their proximity to the intersection of both interaction axes confirms their stable performance across both multiplicative dimensions, reinforcing their high predictability and broad agronomic buffering across the multi-environment network.
