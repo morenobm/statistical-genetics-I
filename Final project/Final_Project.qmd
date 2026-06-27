@@ -47,7 +47,7 @@ maximizing the exploitation of their yield potential.
 In the present study, phenotypic data from this network were utilized,
 specifically from trials conducted in Zambia between 2019 and 2023. The
 dataset encompassed 33 environments, resulting from the combination of
-16 locations ( @fig-maps @tbl-env-year) and different crop years. The
+16 locations ( @fig-maps @tbl-env_year) and different crop years. The
 experiments were laid out in a randomized complete block design (RCBD)
 with three replications per environment. In each trial, 30 to 40
 genotypes were evaluated, totaling 107 genetic materials tested across
@@ -81,7 +81,7 @@ knitr::opts_chunk$set(
 #| label: trials-data
 
 # Loading packages
-packages <- c("ggplot2", "patchwork", "tidyr", "dplyr", "purrr", "knitr", "kableExtra", "grid","ggcorrplot", "asreml","gt", "tidyverse", "ggrepel", "maps")
+packages <- c("ggplot2", "patchwork", "tidyr", "dplyr", "purrr", "knitr", "kableExtra", "grid","ggcorrplot", "asreml","gt", "tidyverse", "ggrepel", "maps","metan","tidyverse","ggpubr")
 invisible(lapply(packages, function(p){
   suppressMessages(suppressPackageStartupMessages(
   suppressWarnings(library(p, character.only = TRUE))))}))
@@ -135,7 +135,7 @@ print(p_map_year)
 ```
 
 ```{r}
-#| label: env-year-table
+#| label: tbl-env_year
 #| tbl-cap: "Environments combination (local x year)"
 
 env_year_table <- data |>
@@ -726,7 +726,7 @@ modelos_aic <- data.frame(
 ```
 
 ```{r}
-#| label: blups_per_env
+#| label: fig-blups_per_env
 #| fig-cap: "Predicted Values in Different Environments"
 
   pred <- predict.asreml(object = mod5,classify = "gen:env")$pvals
@@ -1128,8 +1128,8 @@ and high-yielding germplasm can be robustly identified when the genetic
 signal is strong.
 
 ```{r}
-#| label: fig-env_con
-#| fig-cap: "Genotypes Presence on Different Environments"
+#| label: tbl-env_con
+#| results: hide
 
 table_connect <- table(as.character(df$env), as.character(df$gen))
 table_connect[table_connect > 0] <- 1
@@ -1150,11 +1150,10 @@ conect_perc <- data.frame(
 
 conect_perc <- conect_perc[order(conect_perc$Conectividade, decreasing = TRUE), ]
 
-kable(
+tab_conec <- kable(
   conect_perc,
   caption = "Connectivity of genotypes across experiments",
-  align = "c"
-)
+  align = "c")
 
 table_connect$Var2 <- factor(as.character(table_connect$Var2), levels = conect_perc$Genótipo)
 ordem_env <- names(sort(tapply(table_connect$Freq, table_connect$Var1, sum), decreasing = TRUE))
@@ -1164,6 +1163,12 @@ genotipos_alvo <- c("G342", "G138")
 niveis_genotipos <- levels(table_connect$Var2)
 rotulos_customizados <- ifelse(niveis_genotipos %in% genotipos_alvo, niveis_genotipos, "")
 cores_eixo_x <- ifelse(niveis_genotipos %in% genotipos_alvo, "red", "black")
+```
+
+```{r}
+#| label: fig-env_con
+#| fig-cap: "Genotypes Presence on Different Environments"
+
 ggplot(table_connect, aes(x = Var2, y = Var1, fill = Status)) +
   geom_tile() +
   scale_fill_manual(
@@ -1185,8 +1190,7 @@ ggplot(table_connect, aes(x = Var2, y = Var1, fill = Status)) +
   
     axis.text.x = element_text(color = cores_eixo_x, angle = 90, vjust = 0.5, hjust = 1, size = 8, face = "bold"),
     axis.ticks.x = element_line(color = ifelse(rotulos_customizados == "", NA, "gray")), 
-    panel.grid = element_blank() 
-  )
+    panel.grid = element_blank() )
 ```
 
 Nevertheless, although this methodological convergence supports the
